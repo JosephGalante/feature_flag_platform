@@ -13,7 +13,7 @@ import {and, asc, desc, eq} from "drizzle-orm";
 import {generateApiKey} from "../lib/api-keys";
 import type {ApiDatabase} from "../lib/database";
 
-export type ApiKeySummary = {
+type ApiKeySummary = {
   createdAt: Date;
   environmentId: string;
   id: string;

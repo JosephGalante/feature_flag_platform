@@ -5,24 +5,14 @@ const API_KEY_PREFIX_BYTES = 6;
 const API_KEY_SECRET_BYTES = 24;
 const API_KEY_SEPARATOR = ".";
 
-export type GeneratedApiKey = {
+type GeneratedApiKey = {
   keyHash: string;
   keyPrefix: string;
   rawKey: string;
 };
 
-export function hashApiKey(rawKey: string): string {
+function hashApiKey(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex");
-}
-
-export function parseApiKeyPrefix(rawKey: string): string | null {
-  const separatorIndex = rawKey.indexOf(API_KEY_SEPARATOR);
-
-  if (separatorIndex <= 0) {
-    return null;
-  }
-
-  return rawKey.slice(0, separatorIndex);
 }
 
 export function generateApiKey(): GeneratedApiKey {
