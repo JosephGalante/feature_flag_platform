@@ -1,8 +1,8 @@
-import { config as loadEnv } from "dotenv";
-import { type NodePgDatabase, drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import { readRequiredEnv } from "../../packages/config/src/index.js";
-import { databaseSchema } from "../../packages/shared/src/database.js";
+import {readRequiredEnv} from "@packages/config/src/index.js";
+import {databaseSchema} from "@packages/shared/src/database.js";
+import {config as loadEnv} from "dotenv";
+import {type NodePgDatabase, drizzle} from "drizzle-orm/node-postgres";
+import {Pool} from "pg";
 
 loadEnv();
 
@@ -24,5 +24,5 @@ export function createDatabase(
     schema: databaseSchema,
   });
 
-  return { db, pool };
+  return {db, pool};
 }

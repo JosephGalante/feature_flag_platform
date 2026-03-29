@@ -14,6 +14,10 @@
     "noUncheckedSideEffectImports": true,
     "allowUnreachableCode": false,
     "noErrorTruncation": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "paths": {
+      "@/*": ["./*"],
+      "@packages/*": ["./packages/*"]
+    }
   }
 }
