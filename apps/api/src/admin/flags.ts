@@ -23,7 +23,7 @@ type FlagVariantSeed = {
   value: JsonValue;
 };
 
-export type FlagSummary = {
+type FlagSummary = {
   createdAt: Date;
   createdByUserId: string;
   description: string | null;
@@ -37,14 +37,14 @@ export type FlagSummary = {
   updatedAt: Date;
 };
 
-export type FlagVariantDetail = {
+type FlagVariantDetail = {
   description: string | null;
   id: string;
   key: string;
   value: JsonValue;
 };
 
-export type FlagRuleDetail = {
+type FlagRuleDetail = {
   attributeKey: string | null;
   comparisonValue: JsonValue | null;
   createdAt: Date;
@@ -56,7 +56,7 @@ export type FlagRuleDetail = {
   variantKey: string;
 };
 
-export type FlagEnvironmentDetail = {
+type FlagEnvironmentDetail = {
   config: {
     defaultVariantKey: string;
     enabled: boolean;
@@ -75,13 +75,13 @@ export type FlagEnvironmentDetail = {
   rules: FlagRuleDetail[];
 };
 
-export type FlagDetail = {
+type FlagDetail = {
   environments: FlagEnvironmentDetail[];
   flag: FlagSummary;
   variants: FlagVariantDetail[];
 };
 
-export type AuthorizedFlagAccess = {
+type AuthorizedFlagAccess = {
   flag: FlagSummary;
   role: MembershipRole;
 };

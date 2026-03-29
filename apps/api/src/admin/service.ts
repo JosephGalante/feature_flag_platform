@@ -22,7 +22,7 @@ export type AdminMembershipSummary = {
   role: MembershipRole;
 };
 
-export type ProjectSummary = {
+type ProjectSummary = {
   createdAt: Date;
   id: string;
   key: string;
@@ -30,7 +30,7 @@ export type ProjectSummary = {
   organizationId: string;
 };
 
-export type EnvironmentSummary = {
+type EnvironmentSummary = {
   createdAt: Date;
   id: string;
   key: string;

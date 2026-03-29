@@ -12,7 +12,7 @@ import {
 
 const WRITE_ROLES = new Set<MembershipRole>(["owner", "admin", "developer"]);
 
-export type AuthenticatedAdmin = {
+type AuthenticatedAdmin = {
   memberships: AdminMembershipSummary[];
   user: AdminUserSummary;
 };

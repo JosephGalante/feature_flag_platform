@@ -8,7 +8,7 @@ loadEnv();
 
 export type AppDatabase = NodePgDatabase<typeof databaseSchema>;
 
-export type DatabaseConnection = {
+type DatabaseConnection = {
   db: AppDatabase;
   pool: Pool;
 };

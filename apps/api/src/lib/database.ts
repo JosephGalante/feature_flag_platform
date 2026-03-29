@@ -4,7 +4,7 @@ import {Pool} from "pg";
 
 export type ApiDatabase = NodePgDatabase<typeof databaseSchema>;
 
-export type ApiDatabaseConnection = {
+type ApiDatabaseConnection = {
   db: ApiDatabase;
   pool: Pool;
 };
