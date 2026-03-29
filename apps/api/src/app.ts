@@ -2,6 +2,7 @@ import Fastify, {type FastifyInstance} from "fastify";
 import {type ApiConfig, readApiConfig} from "./config";
 import {createApiDatabase} from "./lib/database";
 import {registerAdminRoutes} from "./routes/admin";
+import {registerAdminApiKeyRoutes} from "./routes/admin-api-keys";
 import {registerAdminFlagRoutes} from "./routes/admin-flags";
 import {registerHealthRoutes} from "./routes/health";
 
@@ -19,6 +20,7 @@ export async function buildApp(config: ApiConfig = readApiConfig()): Promise<Fas
   await registerHealthRoutes(app, db, config);
   await registerAdminRoutes(app, db, config);
   await registerAdminFlagRoutes(app, db, config);
+  await registerAdminApiKeyRoutes(app, db, config);
 
   return app;
 }
