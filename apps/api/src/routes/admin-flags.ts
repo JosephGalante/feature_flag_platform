@@ -1,11 +1,16 @@
+import type {JsonValue} from "@packages/shared/src/json.js";
 import type {FastifyInstance} from "fastify";
 import {z} from "zod";
 import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../admin/auth.js";
 import {
+  type ConfigurationEnvironmentInput,
+  type ConfigurationRuleInput,
+  type ConfigurationVariantInput,
   createFlag,
   findAuthorizedFlagAccess,
   getFlagDetail,
   listFlagsForProject,
+  replaceFlagConfiguration,
   updateFlagMetadata,
 } from "../admin/flags.js";
 import {findAuthorizedProject} from "../admin/service.js";
@@ -47,10 +52,145 @@ const updateFlagBodySchema = z
     },
   );
 
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(jsonValueSchema),
+  ]),
+);
+
+const attributeMatchRuleSchema = z.object({
+  attributeKey: z.string().trim().min(1),
+  comparisonValue: z.union([z.string(), z.array(z.string().trim().min(1)).min(1)]),
+  operator: z.enum(["equals", "in"]),
+  ruleType: z.literal("attribute_match"),
+  sortOrder: z.number().int().positive(),
+  variantKey: z.string().trim().min(1),
+});
+
+const percentageRolloutRuleSchema = z.object({
+  rolloutPercentage: z.number().int().min(0).max(100),
+  ruleType: z.literal("percentage_rollout"),
+  sortOrder: z.number().int().positive(),
+  variantKey: z.string().trim().min(1),
+});
+
+const configurationBodySchema = z.object({
+  environments: z.array(
+    z.object({
+      defaultVariantKey: z.string().trim().min(1),
+      enabled: z.boolean(),
+      environmentId: z.string().uuid(),
+      rules: z.array(z.union([attributeMatchRuleSchema, percentageRolloutRuleSchema])),
+    }),
+  ),
+  variants: z.array(
+    z.object({
+      description: z.string().trim().min(1).nullable().optional(),
+      key: z.string().trim().min(1),
+      value: jsonValueSchema,
+    }),
+  ),
+});
+
 function isKnownServiceError(
   error: unknown,
 ): error is Error & {message: "FLAG_KEY_ALREADY_EXISTS"} {
   return error instanceof Error && error.message === "FLAG_KEY_ALREADY_EXISTS";
+}
+
+function validateConfigurationPayload(input: {
+  currentDetail: NonNullable<Awaited<ReturnType<typeof getFlagDetail>>>;
+  environments: ConfigurationEnvironmentInput[];
+  variants: ConfigurationVariantInput[];
+}): string[] {
+  const issues: string[] = [];
+  const variantKeys = new Set<string>();
+
+  if (input.variants.length === 0) {
+    issues.push("variants must contain at least one variant.");
+  }
+
+  for (const variant of input.variants) {
+    if (variantKeys.has(variant.key)) {
+      issues.push(`variants contains duplicate key '${variant.key}'.`);
+      continue;
+    }
+
+    variantKeys.add(variant.key);
+  }
+
+  const expectedEnvironmentIds = new Set(
+    input.currentDetail.environments.map((environment) => environment.environment.id),
+  );
+  const seenEnvironmentIds = new Set<string>();
+
+  if (input.environments.length !== expectedEnvironmentIds.size) {
+    issues.push("environments must include every existing project environment exactly once.");
+  }
+
+  for (const environment of input.environments) {
+    if (!expectedEnvironmentIds.has(environment.environmentId)) {
+      issues.push(`environment '${environment.environmentId}' does not belong to this flag.`);
+    }
+
+    if (seenEnvironmentIds.has(environment.environmentId)) {
+      issues.push(`environments contains duplicate environmentId '${environment.environmentId}'.`);
+      continue;
+    }
+
+    seenEnvironmentIds.add(environment.environmentId);
+
+    if (!variantKeys.has(environment.defaultVariantKey)) {
+      issues.push(
+        `environment '${environment.environmentId}' references missing defaultVariantKey '${environment.defaultVariantKey}'.`,
+      );
+    }
+
+    const seenSortOrders = new Set<number>();
+
+    for (const rule of environment.rules) {
+      if (seenSortOrders.has(rule.sortOrder)) {
+        issues.push(
+          `environment '${environment.environmentId}' contains duplicate sortOrder '${rule.sortOrder}'.`,
+        );
+      } else {
+        seenSortOrders.add(rule.sortOrder);
+      }
+
+      if (!variantKeys.has(rule.variantKey)) {
+        issues.push(
+          `environment '${environment.environmentId}' rule '${rule.sortOrder}' references missing variantKey '${rule.variantKey}'.`,
+        );
+      }
+
+      if (rule.ruleType === "attribute_match") {
+        if (rule.operator === "equals" && typeof rule.comparisonValue !== "string") {
+          issues.push(
+            `environment '${environment.environmentId}' rule '${rule.sortOrder}' must use a string comparisonValue for equals.`,
+          );
+        }
+
+        if (rule.operator === "in" && !Array.isArray(rule.comparisonValue)) {
+          issues.push(
+            `environment '${environment.environmentId}' rule '${rule.sortOrder}' must use an array comparisonValue for in.`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const environmentId of expectedEnvironmentIds) {
+    if (!seenEnvironmentIds.has(environmentId)) {
+      issues.push(`environments is missing required environment '${environmentId}'.`);
+    }
+  }
+
+  return issues;
 }
 
 export async function registerAdminFlagRoutes(
@@ -308,6 +448,115 @@ export async function registerAdminFlagRoutes(
 
     return reply.send({
       flag,
+    });
+  });
+
+  app.put("/api/admin/flags/:flagId/configuration", async (request, reply) => {
+    const admin = await requireAuthenticatedAdmin(request, reply, db, config);
+
+    if (!admin) {
+      return;
+    }
+
+    const parsedParams = flagParamsSchema.safeParse(request.params);
+    const parsedBody = configurationBodySchema.safeParse(request.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send({
+        error: "INVALID_REQUEST",
+        issues: {
+          body: parsedBody.success ? undefined : parsedBody.error.flatten(),
+          params: parsedParams.success ? undefined : parsedParams.error.flatten(),
+        },
+      });
+    }
+
+    const access = await findAuthorizedFlagAccess(db, parsedParams.data.flagId, admin.user.id);
+
+    if (!access) {
+      return reply.code(404).send({
+        error: "FLAG_NOT_FOUND",
+        message: "Feature flag was not found for the current admin.",
+      });
+    }
+
+    const hasWriteAccess = await requireOrganizationWriteAccess(
+      admin,
+      access.flag.organizationId,
+      reply,
+    );
+
+    if (!hasWriteAccess) {
+      return;
+    }
+
+    const currentDetail = await getFlagDetail(db, access.flag.id);
+
+    if (!currentDetail) {
+      return reply.code(404).send({
+        error: "FLAG_NOT_FOUND",
+        message: "Feature flag detail is unavailable.",
+      });
+    }
+
+    const variants: ConfigurationVariantInput[] = parsedBody.data.variants.map((variant) => ({
+      description: variant.description ?? null,
+      key: variant.key,
+      value: variant.value,
+    }));
+    const environments: ConfigurationEnvironmentInput[] = parsedBody.data.environments.map(
+      (environment) => ({
+        defaultVariantKey: environment.defaultVariantKey,
+        enabled: environment.enabled,
+        environmentId: environment.environmentId,
+        rules: environment.rules.map(
+          (rule): ConfigurationRuleInput =>
+            rule.ruleType === "attribute_match"
+              ? {
+                  attributeKey: rule.attributeKey,
+                  comparisonValue: rule.comparisonValue,
+                  operator: rule.operator,
+                  ruleType: "attribute_match",
+                  sortOrder: rule.sortOrder,
+                  variantKey: rule.variantKey,
+                }
+              : {
+                  rolloutPercentage: rule.rolloutPercentage,
+                  ruleType: "percentage_rollout",
+                  sortOrder: rule.sortOrder,
+                  variantKey: rule.variantKey,
+                },
+        ),
+      }),
+    );
+
+    const validationIssues = validateConfigurationPayload({
+      currentDetail,
+      environments,
+      variants,
+    });
+
+    if (validationIssues.length > 0) {
+      return reply.code(400).send({
+        error: "INVALID_CONFIGURATION",
+        issues: validationIssues,
+      });
+    }
+
+    const result = await replaceFlagConfiguration(db, {
+      actorUserId: admin.user.id,
+      currentDetail,
+      environments,
+      flag: access.flag,
+      requestId: request.id,
+      variants,
+    });
+
+    const detail = result.changed ? await getFlagDetail(db, access.flag.id) : currentDetail;
+
+    return reply.send({
+      changed: result.changed,
+      detail,
     });
   });
 }

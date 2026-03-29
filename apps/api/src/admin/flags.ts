@@ -86,6 +86,39 @@ export type AuthorizedFlagAccess = {
   role: MembershipRole;
 };
 
+export type ConfigurationVariantInput = {
+  description: string | null;
+  key: string;
+  value: JsonValue;
+};
+
+export type ConfigurationRuleInput =
+  | {
+      attributeKey: string;
+      comparisonValue: JsonValue;
+      operator: "equals" | "in";
+      ruleType: "attribute_match";
+      rolloutPercentage?: never;
+      sortOrder: number;
+      variantKey: string;
+    }
+  | {
+      attributeKey?: never;
+      comparisonValue?: never;
+      operator?: never;
+      ruleType: "percentage_rollout";
+      rolloutPercentage: number;
+      sortOrder: number;
+      variantKey: string;
+    };
+
+export type ConfigurationEnvironmentInput = {
+  defaultVariantKey: string;
+  enabled: boolean;
+  environmentId: string;
+  rules: ConfigurationRuleInput[];
+};
+
 type CreateFlagInput = {
   actorUserId: string;
   description: string | null;
@@ -111,6 +144,37 @@ type ListProjectFlagsInput = {
   projectId: string;
   search?: string;
   status?: FeatureFlagStatus;
+};
+
+type ReplaceFlagConfigurationInput = {
+  actorUserId: string;
+  currentDetail: FlagDetail;
+  environments: ConfigurationEnvironmentInput[];
+  flag: AuthorizedFlagAccess["flag"];
+  requestId: string;
+  variants: ConfigurationVariantInput[];
+};
+
+type EditableConfigurationSnapshot = {
+  environments: Array<{
+    defaultVariantKey: string;
+    enabled: boolean;
+    environmentId: string;
+    rules: Array<{
+      attributeKey: string | null;
+      comparisonValue: JsonValue | null;
+      operator: string | null;
+      rolloutPercentage: number | null;
+      ruleType: string;
+      sortOrder: number;
+      variantKey: string;
+    }>;
+  }>;
+  variants: Array<{
+    description: string | null;
+    key: string;
+    value: JsonValue;
+  }>;
 };
 
 function buildDefaultVariants(flagType: FeatureFlagType): {
@@ -214,6 +278,93 @@ function toAuditFlagSnapshot(flag: FlagSummary): JsonValue {
     projectId: flag.projectId,
     status: flag.status,
     updatedAt: flag.updatedAt.toISOString(),
+  };
+}
+
+function normalizeJsonValue(value: JsonValue): JsonValue {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    typeof value === "string"
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeJsonValue(item));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, nestedValue]) => [key, normalizeJsonValue(nestedValue)]),
+  );
+}
+
+function buildEditableConfigurationSnapshot(detail: FlagDetail): EditableConfigurationSnapshot {
+  return {
+    environments: detail.environments
+      .map((environment) => ({
+        defaultVariantKey: environment.config.defaultVariantKey,
+        enabled: environment.config.enabled,
+        environmentId: environment.environment.id,
+        rules: environment.rules
+          .map((rule) => ({
+            attributeKey: rule.attributeKey,
+            comparisonValue:
+              rule.comparisonValue === null ? null : normalizeJsonValue(rule.comparisonValue),
+            operator: rule.operator,
+            rolloutPercentage: rule.rolloutPercentage,
+            ruleType: rule.ruleType,
+            sortOrder: rule.sortOrder,
+            variantKey: rule.variantKey,
+          }))
+          .sort((left, right) => left.sortOrder - right.sortOrder),
+      }))
+      .sort((left, right) => left.environmentId.localeCompare(right.environmentId)),
+    variants: detail.variants
+      .map((variant) => ({
+        description: variant.description,
+        key: variant.key,
+        value: normalizeJsonValue(variant.value),
+      }))
+      .sort((left, right) => left.key.localeCompare(right.key)),
+  };
+}
+
+function buildRequestedConfigurationSnapshot(input: {
+  environments: ConfigurationEnvironmentInput[];
+  variants: ConfigurationVariantInput[];
+}): EditableConfigurationSnapshot {
+  return {
+    environments: input.environments
+      .map((environment) => ({
+        defaultVariantKey: environment.defaultVariantKey,
+        enabled: environment.enabled,
+        environmentId: environment.environmentId,
+        rules: environment.rules
+          .map((rule) => ({
+            attributeKey: rule.ruleType === "attribute_match" ? rule.attributeKey : null,
+            comparisonValue:
+              rule.ruleType === "attribute_match" ? normalizeJsonValue(rule.comparisonValue) : null,
+            operator: rule.ruleType === "attribute_match" ? rule.operator : null,
+            rolloutPercentage:
+              rule.ruleType === "percentage_rollout" ? rule.rolloutPercentage : null,
+            ruleType: rule.ruleType,
+            sortOrder: rule.sortOrder,
+            variantKey: rule.variantKey,
+          }))
+          .sort((left, right) => left.sortOrder - right.sortOrder),
+      }))
+      .sort((left, right) => left.environmentId.localeCompare(right.environmentId)),
+    variants: input.variants
+      .map((variant) => ({
+        description: variant.description,
+        key: variant.key,
+        value: normalizeJsonValue(variant.value),
+      }))
+      .sort((left, right) => left.key.localeCompare(right.key)),
   };
 }
 
@@ -633,4 +784,133 @@ export async function updateFlagMetadata(
 
     return updatedSummary;
   });
+}
+
+export async function replaceFlagConfiguration(
+  db: ApiDatabase,
+  input: ReplaceFlagConfigurationInput,
+): Promise<{changed: boolean}> {
+  const currentSnapshot = buildEditableConfigurationSnapshot(input.currentDetail);
+  const requestedSnapshot = buildRequestedConfigurationSnapshot({
+    environments: input.environments,
+    variants: input.variants,
+  });
+
+  if (JSON.stringify(currentSnapshot) === JSON.stringify(requestedSnapshot)) {
+    return {changed: false};
+  }
+
+  await db.transaction(async (trx) => {
+    const configRows = await trx
+      .select({
+        environmentId: flagEnvironmentConfigs.environmentId,
+        id: flagEnvironmentConfigs.id,
+      })
+      .from(flagEnvironmentConfigs)
+      .where(eq(flagEnvironmentConfigs.featureFlagId, input.flag.id));
+
+    const configIdByEnvironmentId = new Map(
+      configRows.map((row) => [row.environmentId, row.id] as const),
+    );
+    const now = new Date();
+
+    await trx.delete(flagRules).where(
+      inArray(
+        flagRules.flagEnvironmentConfigId,
+        configRows.map((row) => row.id),
+      ),
+    );
+    await trx.delete(flagVariants).where(eq(flagVariants.featureFlagId, input.flag.id));
+
+    await trx.insert(flagVariants).values(
+      input.variants.map((variant) => ({
+        description: variant.description,
+        featureFlagId: input.flag.id,
+        key: variant.key,
+        valueJson: variant.value,
+      })),
+    );
+
+    for (const environment of input.environments) {
+      const configId = configIdByEnvironmentId.get(environment.environmentId);
+
+      if (!configId) {
+        throw new Error(`Missing environment config for environment ${environment.environmentId}`);
+      }
+
+      await trx
+        .update(flagEnvironmentConfigs)
+        .set({
+          defaultVariantKey: environment.defaultVariantKey,
+          enabled: environment.enabled,
+          projectionVersion: sql`${flagEnvironmentConfigs.projectionVersion} + 1`,
+          updatedAt: now,
+          updatedByUserId: input.actorUserId,
+        })
+        .where(eq(flagEnvironmentConfigs.id, configId));
+
+      if (environment.rules.length > 0) {
+        await trx.insert(flagRules).values(
+          environment.rules.map((rule) => ({
+            attributeKey: rule.ruleType === "attribute_match" ? rule.attributeKey : null,
+            comparisonValueJson: rule.ruleType === "attribute_match" ? rule.comparisonValue : null,
+            flagEnvironmentConfigId: configId,
+            operator: rule.ruleType === "attribute_match" ? rule.operator : null,
+            rolloutPercentage:
+              rule.ruleType === "percentage_rollout" ? rule.rolloutPercentage : null,
+            ruleType: rule.ruleType,
+            sortOrder: rule.sortOrder,
+            variantKey: rule.variantKey,
+          })),
+        );
+      }
+    }
+
+    await trx
+      .update(featureFlags)
+      .set({
+        updatedAt: now,
+      })
+      .where(eq(featureFlags.id, input.flag.id))
+      .returning({
+        createdAt: featureFlags.createdAt,
+        createdByUserId: featureFlags.createdByUserId,
+        description: featureFlags.description,
+        flagType: featureFlags.flagType,
+        id: featureFlags.id,
+        key: featureFlags.key,
+        name: featureFlags.name,
+        projectId: featureFlags.projectId,
+        status: featureFlags.status,
+        updatedAt: featureFlags.updatedAt,
+      });
+
+    await trx.insert(auditLogs).values({
+      action: "flag.configuration.updated",
+      actorUserId: input.actorUserId,
+      afterJson: requestedSnapshot,
+      beforeJson: currentSnapshot,
+      entityId: input.flag.id,
+      entityType: "feature_flag",
+      organizationId: input.flag.organizationId,
+      projectId: input.flag.projectId,
+      requestId: input.requestId,
+    });
+
+    await trx.insert(outboxEvents).values(
+      input.environments.map((environment) =>
+        buildProjectionRefreshEvent({
+          actorUserId: input.actorUserId,
+          environmentId: environment.environmentId,
+          featureFlagId: input.flag.id,
+          organizationId: input.flag.organizationId,
+          projectId: input.flag.projectId,
+          reason: "flag.configuration.updated",
+          requestId: input.requestId,
+        }),
+      ),
+    );
+  });
+
+  return {changed: true};
 }

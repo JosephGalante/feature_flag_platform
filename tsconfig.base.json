@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "strict": true,
+    "noUnusedLocals": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noFallthroughCasesInSwitch": true,
