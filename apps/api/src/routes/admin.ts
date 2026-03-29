@@ -1,17 +1,16 @@
 import type {FastifyInstance, FastifyReply, FastifyRequest} from "fastify";
 import {z} from "zod";
+import {getOrganizationMembership, requireAuthenticatedAdmin} from "../admin/auth.js";
 import {
-  type AdminUserSummary,
   findAuthorizedProject,
   findUserByEmail,
-  findUserById,
   listEnvironmentsForProject,
   listMembershipsForUser,
   listProjectsForOrganization,
 } from "../admin/service.js";
 import type {ApiConfig} from "../config.js";
 import type {ApiDatabase} from "../lib/database.js";
-import {clearSessionCookie, createSessionCookie, readSessionUserId} from "../lib/session.js";
+import {clearSessionCookie, createSessionCookie} from "../lib/session.js";
 
 const loginBodySchema = z.object({
   email: z.string().email(),
@@ -24,49 +23,6 @@ const organizationParamsSchema = z.object({
 const projectParamsSchema = z.object({
   projectId: z.string().uuid(),
 });
-
-type AuthenticatedAdmin = {
-  memberships: Awaited<ReturnType<typeof listMembershipsForUser>>;
-  user: AdminUserSummary;
-};
-
-async function requireAuthenticatedAdmin(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  db: ApiDatabase,
-  config: ApiConfig,
-): Promise<AuthenticatedAdmin | null> {
-  const userId = readSessionUserId(
-    request.headers.cookie,
-    config.sessionCookieName,
-    config.sessionSecret,
-  );
-
-  if (!userId) {
-    await reply.code(401).send({
-      error: "UNAUTHENTICATED",
-      message: "Admin session is required.",
-    });
-    return null;
-  }
-
-  const user = await findUserById(db, userId);
-
-  if (!user) {
-    await reply.code(401).send({
-      error: "INVALID_SESSION",
-      message: "Admin session is no longer valid.",
-    });
-    return null;
-  }
-
-  const memberships = await listMembershipsForUser(db, user.id);
-
-  return {
-    memberships,
-    user,
-  };
-}
 
 export async function registerAdminRoutes(
   app: FastifyInstance,
@@ -153,9 +109,7 @@ export async function registerAdminRoutes(
       });
     }
 
-    const membership = admin.memberships.find(
-      (item) => item.organizationId === parsedParams.data.organizationId,
-    );
+    const membership = getOrganizationMembership(admin, parsedParams.data.organizationId);
 
     if (!membership) {
       return reply.code(404).send({
