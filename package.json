@@ -1,0 +1,35 @@
+{
+  "name": "feature-flag-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.5",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "pnpm -r typecheck",
+    "dev:web": "pnpm --filter @feature-flag-platform/web dev",
+    "dev:api": "pnpm --filter @feature-flag-platform/api dev",
+    "dev:worker": "pnpm --filter @feature-flag-platform/worker dev",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
+    "db:migrate": "tsx scripts/migrate.ts up",
+    "db:migrate:down": "tsx scripts/migrate.ts down",
+    "db:migrate:list": "tsx scripts/migrate.ts list"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.2",
+    "dotenv": "^16.4.7",
+    "kysely": "^0.27.5",
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
