@@ -8,6 +8,13 @@
       "when": 1774805992255,
       "tag": "0000_mighty_pete_wisdom",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774806466657,
+      "tag": "0001_feature_flag_config_schema",
+      "breakpoints": true
     }
   ]
 }

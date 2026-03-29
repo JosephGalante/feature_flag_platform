@@ -47,12 +47,22 @@ async function ensureUser(db: AppDatabase, values: NewUser): Promise<string> {
     return existing.id;
   }
 
-  const [inserted] = await db.insert(users).values(values).returning({ id: users.id });
+  const [inserted] = await db
+    .insert(users)
+    .values(values)
+    .returning({ id: users.id });
+
+  if (!inserted) {
+    throw new Error("Failed to insert user in ensureUser");
+  }
 
   return inserted.id;
 }
 
-async function ensureOrganization(db: AppDatabase, values: NewOrganization): Promise<string> {
+async function ensureOrganization(
+  db: AppDatabase,
+  values: NewOrganization,
+): Promise<string> {
   const [existing] = await db
     .select({ id: organizations.id })
     .from(organizations)
@@ -68,6 +78,10 @@ async function ensureOrganization(db: AppDatabase, values: NewOrganization): Pro
     .values(values)
     .returning({ id: organizations.id });
 
+  if (!inserted) {
+    throw new Error("Failed to insert organization in ensureOrganization");
+  }
+  
   return inserted.id;
 }
 
@@ -97,7 +111,12 @@ async function ensureProject(
   const [existing] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.organizationId, organizationId), eq(projects.key, values.key)))
+    .where(
+      and(
+        eq(projects.organizationId, organizationId),
+        eq(projects.key, values.key),
+      ),
+    )
     .limit(1);
 
   if (existing) {
@@ -112,6 +131,10 @@ async function ensureProject(
     })
     .returning({ id: projects.id });
 
+  if (!inserted) {
+    throw new Error("Failed to insert project in ensureProject");
+  }
+
   return inserted.id;
 }
 
@@ -123,7 +146,12 @@ async function ensureEnvironment(
   const [existing] = await db
     .select({ id: environments.id })
     .from(environments)
-    .where(and(eq(environments.projectId, projectId), eq(environments.key, values.key)))
+    .where(
+      and(
+        eq(environments.projectId, projectId),
+        eq(environments.key, values.key),
+      ),
+    )
     .limit(1);
 
   if (existing) {
