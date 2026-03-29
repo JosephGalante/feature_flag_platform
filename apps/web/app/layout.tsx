@@ -1,9 +1,10 @@
 import type {Metadata} from "next";
 import type {ReactNode} from "react";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Feature Flag Platform",
-  description: "Phase 0 workspace scaffold",
+  title: "Feature Flag Platform Admin",
+  description: "Phase 4 admin console",
 };
 
 type RootLayoutProps = {

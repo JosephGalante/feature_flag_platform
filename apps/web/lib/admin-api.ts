@@ -1,0 +1,235 @@
+export const SESSION_COOKIE_NAME = "ff_admin_session";
+
+const API_BASE_URL = process.env.API_BASE_URL ?? "http://127.0.0.1:4000";
+
+type ApiResponse<T> = {
+  data: T | null;
+  status: number;
+};
+
+type AdminMembership = {
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  role: "admin" | "developer" | "owner" | "viewer";
+};
+
+type AdminUser = {
+  email: string;
+  id: string;
+  name: string;
+};
+
+type AuthenticatedAdmin = {
+  memberships: AdminMembership[];
+  user: AdminUser;
+};
+
+type AdminProject = {
+  createdAt: string;
+  id: string;
+  key: string;
+  name: string;
+  organizationId: string;
+};
+
+type AdminEnvironment = {
+  createdAt: string;
+  id: string;
+  key: string;
+  name: string;
+  projectId: string;
+  sortOrder: number;
+};
+
+type AdminFlagSummary = {
+  createdAt: string;
+  createdByUserId: string;
+  description: string | null;
+  flagType: "boolean" | "variant";
+  id: string;
+  key: string;
+  name: string;
+  organizationId: string;
+  projectId: string;
+  status: "active" | "archived";
+  updatedAt: string;
+};
+
+type ProjectsResponse = {
+  organization: AdminMembership;
+  projects: AdminProject[];
+};
+
+type EnvironmentsResponse = {
+  environments: AdminEnvironment[];
+  project: AdminProject;
+};
+
+type FlagsResponse = {
+  flags: AdminFlagSummary[];
+  project: AdminProject;
+};
+
+type LoginResponse = {
+  memberships: AdminMembership[];
+  user: AdminUser;
+};
+
+async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
+  const text = await response.text();
+  let data: T | null = null;
+
+  if (text.length > 0) {
+    data = JSON.parse(text) as T;
+  }
+
+  return {
+    data,
+    status: response.status,
+  };
+}
+
+async function apiFetch<T>(
+  path: string,
+  input: {init?: RequestInit; sessionCookie?: string} = {},
+): Promise<ApiResponse<T>> {
+  const headers = new Headers(input.init?.headers ?? {});
+
+  if (input.sessionCookie) {
+    headers.set("cookie", `${SESSION_COOKIE_NAME}=${input.sessionCookie}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...input.init,
+    cache: "no-store",
+    headers,
+  });
+
+  return parseResponse<T>(response);
+}
+
+export async function loginAsAdmin(email: string): Promise<{
+  response: LoginResponse | null;
+  setCookieHeader: string | null;
+  status: number;
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/session/login`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({email}),
+  });
+
+  const payload = await parseResponse<LoginResponse>(response);
+
+  return {
+    response: payload.data,
+    setCookieHeader: response.headers.get("set-cookie"),
+    status: payload.status,
+  };
+}
+
+export async function getCurrentAdmin(sessionCookie?: string): Promise<AuthenticatedAdmin | null> {
+  const response = await apiFetch<AuthenticatedAdmin>("/api/admin/me", {
+    ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+  });
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load current admin.");
+  }
+
+  return response.data;
+}
+
+export async function getProjectsForOrganization(
+  organizationId: string,
+  sessionCookie?: string,
+): Promise<AdminProject[]> {
+  const response = await apiFetch<ProjectsResponse>(
+    `/api/admin/organizations/${organizationId}/projects`,
+    {
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load projects.");
+  }
+
+  return response.data.projects;
+}
+
+export async function getEnvironmentsForProject(
+  projectId: string,
+  sessionCookie?: string,
+): Promise<AdminEnvironment[]> {
+  const response = await apiFetch<EnvironmentsResponse>(
+    `/api/admin/projects/${projectId}/environments`,
+    {
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load environments.");
+  }
+
+  return response.data.environments;
+}
+
+export async function getFlagsForProject(
+  projectId: string,
+  sessionCookie?: string,
+): Promise<AdminFlagSummary[]> {
+  const response = await apiFetch<FlagsResponse>(`/api/admin/projects/${projectId}/flags`, {
+    ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+  });
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load flags.");
+  }
+
+  return response.data.flags;
+}
+
+export function readCookieValue(setCookieHeader: string | null, cookieName: string): string | null {
+  if (!setCookieHeader) {
+    return null;
+  }
+
+  const [cookiePair] = setCookieHeader.split(";", 1);
+
+  if (!cookiePair) {
+    return null;
+  }
+
+  const separatorIndex = cookiePair.indexOf("=");
+
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const name = cookiePair.slice(0, separatorIndex);
+  const value = cookiePair.slice(separatorIndex + 1);
+
+  return name === cookieName && value.length > 0 ? value : null;
+}

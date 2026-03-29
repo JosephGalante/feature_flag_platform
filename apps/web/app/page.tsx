@@ -1,8 +1,11 @@
-export default function HomePage() {
-  return (
-    <main>
-      <h1>Feature Flag Platform</h1>
-      <p>Phase 0 scaffold is in place. No product features have been implemented yet.</p>
-    </main>
-  );
+import {cookies} from "next/headers";
+import {redirect} from "next/navigation";
+import {SESSION_COOKIE_NAME, getCurrentAdmin} from "../lib/admin-api";
+
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const admin = await getCurrentAdmin(sessionCookie);
+
+  redirect(admin ? "/console" : "/login");
 }
