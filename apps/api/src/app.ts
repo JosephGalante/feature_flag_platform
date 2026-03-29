@@ -3,6 +3,7 @@ import {type ApiConfig, readApiConfig} from "./config";
 import {createApiDatabase} from "./lib/database";
 import {registerAdminRoutes} from "./routes/admin";
 import {registerAdminApiKeyRoutes} from "./routes/admin-api-keys";
+import {registerAdminAuditLogRoutes} from "./routes/admin-audit-logs";
 import {registerAdminFlagRoutes} from "./routes/admin-flags";
 import {registerHealthRoutes} from "./routes/health";
 
@@ -21,6 +22,7 @@ export async function buildApp(config: ApiConfig = readApiConfig()): Promise<Fas
   await registerAdminRoutes(app, db, config);
   await registerAdminFlagRoutes(app, db, config);
   await registerAdminApiKeyRoutes(app, db, config);
+  await registerAdminAuditLogRoutes(app, db, config);
 
   return app;
 }
