@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -16,6 +17,8 @@ export type FeatureFlagType = "boolean" | "variant";
 export type FeatureFlagStatus = "active" | "archived";
 export type FlagRuleType = "attribute_match" | "percentage_rollout";
 export type FlagRuleOperator = "equals" | "in";
+export type ApiKeyStatus = "active" | "revoked";
+export type OutboxEventStatus = "failed" | "pending" | "published";
 
 export const membershipRoleEnum = pgEnum("membership_role", [
   "owner",
@@ -27,6 +30,12 @@ export const featureFlagTypeEnum = pgEnum("feature_flag_type", ["boolean", "vari
 export const featureFlagStatusEnum = pgEnum("feature_flag_status", ["active", "archived"]);
 export const flagRuleTypeEnum = pgEnum("flag_rule_type", ["attribute_match", "percentage_rollout"]);
 export const flagRuleOperatorEnum = pgEnum("flag_rule_operator", ["equals", "in"]);
+export const apiKeyStatusEnum = pgEnum("api_key_status", ["active", "revoked"]);
+export const outboxEventStatusEnum = pgEnum("outbox_event_status", [
+  "pending",
+  "published",
+  "failed",
+]);
 
 export const users = pgTable(
   "users",
@@ -182,6 +191,84 @@ export const flagRules = pgTable(
   ],
 );
 
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom().notNull(),
+    environmentId: uuid("environment_id")
+      .notNull()
+      .references(() => environments.id, {onDelete: "cascade"}),
+    name: text("name").notNull(),
+    keyPrefix: text("key_prefix").notNull(),
+    keyHash: text("key_hash").notNull(),
+    status: apiKeyStatusEnum("status").notNull().default("active"),
+    lastUsedAt: timestamp("last_used_at", {mode: "date", withTimezone: true}),
+    createdAt: timestamp("created_at", {mode: "date", withTimezone: true}).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", {mode: "date", withTimezone: true}),
+  },
+  (table) => [
+    index("api_keys_environment_id_idx").on(table.environmentId),
+    index("api_keys_key_prefix_idx").on(table.keyPrefix),
+  ],
+);
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom().notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, {onDelete: "cascade"}),
+    projectId: uuid("project_id").references(() => projects.id, {onDelete: "set null"}),
+    environmentId: uuid("environment_id").references(() => environments.id, {onDelete: "set null"}),
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => users.id),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    action: text("action").notNull(),
+    beforeJson: jsonb("before_json").$type<JsonValue>(),
+    afterJson: jsonb("after_json").$type<JsonValue>(),
+    requestId: text("request_id").notNull(),
+    createdAt: timestamp("created_at", {mode: "date", withTimezone: true}).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_logs_organization_id_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.desc(),
+    ),
+    index("audit_logs_entity_type_entity_id_created_at_idx").on(
+      table.entityType,
+      table.entityId,
+      table.createdAt.desc(),
+    ),
+  ],
+);
+
+export const outboxEvents = pgTable(
+  "outbox_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom().notNull(),
+    eventType: text("event_type").notNull(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: uuid("aggregate_id").notNull(),
+    payloadJson: jsonb("payload_json").$type<JsonValue>().notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: outboxEventStatusEnum("status").notNull().default("pending"),
+    availableAt: timestamp("available_at", {mode: "date", withTimezone: true})
+      .notNull()
+      .defaultNow(),
+    publishedAt: timestamp("published_at", {mode: "date", withTimezone: true}),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", {mode: "date", withTimezone: true}).notNull().defaultNow(),
+  },
+  (table) => [
+    index("outbox_events_status_available_at_idx").on(table.status, table.availableAt),
+    unique("outbox_events_idempotency_key_key").on(table.idempotencyKey),
+  ],
+);
+
 export const databaseSchema = {
   users,
   organizations,
@@ -192,6 +279,9 @@ export const databaseSchema = {
   flagEnvironmentConfigs,
   flagVariants,
   flagRules,
+  apiKeys,
+  auditLogs,
+  outboxEvents,
 };
 
 export type User = typeof users.$inferSelect;
@@ -220,3 +310,12 @@ export type NewFlagVariant = typeof flagVariants.$inferInsert;
 
 export type FlagRule = typeof flagRules.$inferSelect;
 export type NewFlagRule = typeof flagRules.$inferInsert;
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type NewAuditLog = typeof auditLogs.$inferInsert;
+
+export type OutboxEvent = typeof outboxEvents.$inferSelect;
+export type NewOutboxEvent = typeof outboxEvents.$inferInsert;

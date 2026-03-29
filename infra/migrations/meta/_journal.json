@@ -15,6 +15,13 @@
       "when": 1774806466657,
       "tag": "0001_feature_flag_config_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774807781237,
+      "tag": "0002_operational_schema",
+      "breakpoints": true
     }
   ]
 }
