@@ -4,16 +4,10 @@ import type {
   NewOrganization,
   NewProject,
   NewUser,
-} from "@packages/shared/src/database.js";
-import {
-  environments,
-  memberships,
-  organizations,
-  projects,
-  users,
-} from "@packages/shared/src/database.js";
+} from "@shared/database";
+import {environments, memberships, organizations, projects, users} from "@shared/database";
 import {and, eq} from "drizzle-orm";
-import {type AppDatabase, createDatabase} from "./lib/database.js";
+import {type AppDatabase, createDatabase} from "./lib/database";
 
 const demoUser: NewUser = {
   email: "owner@acme.test",

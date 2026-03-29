@@ -1,16 +1,16 @@
 import type {FastifyInstance} from "fastify";
 import {z} from "zod";
-import {getOrganizationMembership, requireAuthenticatedAdmin} from "../admin/auth.js";
+import {getOrganizationMembership, requireAuthenticatedAdmin} from "../admin/auth";
 import {
   findAuthorizedProject,
   findUserByEmail,
   listEnvironmentsForProject,
   listMembershipsForUser,
   listProjectsForOrganization,
-} from "../admin/service.js";
-import type {ApiConfig} from "../config.js";
-import type {ApiDatabase} from "../lib/database.js";
-import {clearSessionCookie, createSessionCookie} from "../lib/session.js";
+} from "../admin/service";
+import type {ApiConfig} from "../config";
+import type {ApiDatabase} from "../lib/database";
+import {clearSessionCookie, createSessionCookie} from "../lib/session";
 
 const loginBodySchema = z.object({
   email: z.string().email(),

@@ -1,2 +1,2 @@
-export * from "./json.js";
-export * from "./database.js";
+export * from "./json";
+export * from "./database";

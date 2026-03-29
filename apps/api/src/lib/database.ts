@@ -1,4 +1,4 @@
-import {databaseSchema} from "@packages/shared/src/database.js";
+import {databaseSchema} from "@shared/database";
 import {type NodePgDatabase, drizzle} from "drizzle-orm/node-postgres";
 import {Pool} from "pg";
 

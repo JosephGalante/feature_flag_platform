@@ -1,4 +1,4 @@
-import {readOptionalEnv, readRequiredEnv} from "@packages/config/src/index.js";
+import {readOptionalEnv, readRequiredEnv} from "@config";
 import {config as loadEnv} from "dotenv";
 
 loadEnv();

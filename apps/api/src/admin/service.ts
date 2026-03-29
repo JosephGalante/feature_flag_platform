@@ -5,9 +5,9 @@ import {
   organizations,
   projects,
   users,
-} from "@packages/shared/src/database.js";
+} from "@shared/database";
 import {and, asc, eq} from "drizzle-orm";
-import type {ApiDatabase} from "../lib/database.js";
+import type {ApiDatabase} from "../lib/database";
 
 export type AdminUserSummary = {
   email: string;

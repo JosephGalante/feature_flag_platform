@@ -1,5 +1,5 @@
-import {readRequiredEnv} from "@packages/config/src/index.js";
-import {databaseSchema} from "@packages/shared/src/database.js";
+import {readRequiredEnv} from "@config";
+import {databaseSchema} from "@shared/database";
 import {config as loadEnv} from "dotenv";
 import {type NodePgDatabase, drizzle} from "drizzle-orm/node-postgres";
 import {Pool} from "pg";

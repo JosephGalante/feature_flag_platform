@@ -1,14 +1,14 @@
-import type {MembershipRole} from "@packages/shared/src/database.js";
+import type {MembershipRole} from "@shared/database";
 import type {FastifyReply, FastifyRequest} from "fastify";
-import type {ApiConfig} from "../config.js";
-import type {ApiDatabase} from "../lib/database.js";
-import {readSessionUserId} from "../lib/session.js";
+import type {ApiConfig} from "../config";
+import type {ApiDatabase} from "../lib/database";
+import {readSessionUserId} from "../lib/session";
 import {
   type AdminMembershipSummary,
   type AdminUserSummary,
   findUserById,
   listMembershipsForUser,
-} from "./service.js";
+} from "./service";
 
 const WRITE_ROLES = new Set<MembershipRole>(["owner", "admin", "developer"]);
 

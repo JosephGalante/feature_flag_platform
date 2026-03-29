@@ -1,5 +1,5 @@
-export {evaluateFlag, evaluateFlags} from "./evaluate.js";
-export {getRolloutBucket, getRolloutThreshold, stableHash} from "./hash.js";
+export {evaluateFlag, evaluateFlags} from "./evaluate";
+export {getRolloutBucket, getRolloutThreshold, stableHash} from "./hash";
 export type {
   CompiledEnvironmentProjection,
   CompiledFlag,
@@ -13,4 +13,4 @@ export type {
   EvaluationContext,
   EvaluationReason,
   EvaluationResult,
-} from "./types.js";
+} from "./types";

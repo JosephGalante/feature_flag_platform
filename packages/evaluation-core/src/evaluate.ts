@@ -1,4 +1,4 @@
-import {getRolloutBucket, getRolloutThreshold} from "./hash.js";
+import {getRolloutBucket, getRolloutThreshold} from "./hash";
 import type {
   CompiledEnvironmentProjection,
   CompiledFlag,
@@ -7,7 +7,7 @@ import type {
   EvaluationContext,
   EvaluationReason,
   EvaluationResult,
-} from "./types.js";
+} from "./types";
 
 type VariantResolution = {
   value: unknown;

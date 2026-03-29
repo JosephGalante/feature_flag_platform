@@ -12,10 +12,10 @@ import {
   memberships,
   outboxEvents,
   projects,
-} from "@packages/shared/src/database.js";
-import type {JsonValue} from "@packages/shared/src/json.js";
+} from "@shared/database";
+import type {JsonValue} from "@shared/json";
 import {type SQL, and, asc, desc, eq, ilike, inArray, or, sql} from "drizzle-orm";
-import type {ApiDatabase} from "../lib/database.js";
+import type {ApiDatabase} from "../lib/database";
 
 type FlagVariantSeed = {
   description: string;

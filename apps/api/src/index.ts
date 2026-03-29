@@ -1,5 +1,5 @@
-import {buildApp} from "./app.js";
-import {readApiConfig} from "./config.js";
+import {buildApp} from "./app";
+import {readApiConfig} from "./config";
 
 const start = async () => {
   const config = readApiConfig();

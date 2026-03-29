@@ -1,7 +1,7 @@
-import type {JsonValue} from "@packages/shared/src/json.js";
+import type {JsonValue} from "@shared/json";
 import type {FastifyInstance} from "fastify";
 import {z} from "zod";
-import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../admin/auth.js";
+import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../admin/auth";
 import {
   type ConfigurationEnvironmentInput,
   type ConfigurationRuleInput,
@@ -12,10 +12,10 @@ import {
   listFlagsForProject,
   replaceFlagConfiguration,
   updateFlagMetadata,
-} from "../admin/flags.js";
-import {findAuthorizedProject} from "../admin/service.js";
-import type {ApiConfig} from "../config.js";
-import type {ApiDatabase} from "../lib/database.js";
+} from "../admin/flags";
+import {findAuthorizedProject} from "../admin/service";
+import type {ApiConfig} from "../config";
+import type {ApiDatabase} from "../lib/database";
 
 const projectParamsSchema = z.object({
   projectId: z.string().uuid(),

@@ -1,9 +1,9 @@
 import Fastify, {type FastifyInstance} from "fastify";
-import {type ApiConfig, readApiConfig} from "./config.js";
-import {createApiDatabase} from "./lib/database.js";
-import {registerAdminFlagRoutes} from "./routes/admin-flags.js";
-import {registerAdminRoutes} from "./routes/admin.js";
-import {registerHealthRoutes} from "./routes/health.js";
+import {type ApiConfig, readApiConfig} from "./config";
+import {createApiDatabase} from "./lib/database";
+import {registerAdminRoutes} from "./routes/admin";
+import {registerAdminFlagRoutes} from "./routes/admin-flags";
+import {registerHealthRoutes} from "./routes/health";
 
 export async function buildApp(config: ApiConfig = readApiConfig()): Promise<FastifyInstance> {
   const app = Fastify({

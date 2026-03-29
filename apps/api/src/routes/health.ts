@@ -1,8 +1,8 @@
 import {sql} from "drizzle-orm";
 import type {FastifyInstance} from "fastify";
-import type {ApiConfig} from "../config.js";
-import type {ApiDatabase} from "../lib/database.js";
-import {pingRedis} from "../lib/redis.js";
+import type {ApiConfig} from "../config";
+import type {ApiDatabase} from "../lib/database";
+import {pingRedis} from "../lib/redis";
 
 export async function registerHealthRoutes(
   app: FastifyInstance,

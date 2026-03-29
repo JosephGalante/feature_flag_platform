@@ -10,7 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type {JsonValue} from "./json.js";
+import type {JsonValue} from "./json";
 
 export type MembershipRole = "admin" | "developer" | "owner" | "viewer";
 export type FeatureFlagType = "boolean" | "variant";

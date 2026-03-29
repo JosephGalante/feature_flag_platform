@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -19,7 +20,10 @@
     "erasableSyntaxOnly": true,
     "paths": {
       "@/*": ["./*"],
-      "@packages/*": ["./packages/*"]
+      "@config": ["./packages/config/src/index.ts"],
+      "@config/*": ["./packages/config/src/*"],
+      "@shared": ["./packages/shared/src/index.ts"],
+      "@shared/*": ["./packages/shared/src/*"]
     }
   }
 }

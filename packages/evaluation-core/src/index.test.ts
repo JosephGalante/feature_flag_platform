@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {evaluateFlag, evaluateFlags, getRolloutBucket} from "./index.js";
-import type {CompiledEnvironmentProjection, CompiledFlag} from "./types.js";
+import {evaluateFlag, evaluateFlags, getRolloutBucket} from "./index";
+import type {CompiledEnvironmentProjection, CompiledFlag} from "./types";
 
 const baseFlag: CompiledFlag = {
   flagEnvironmentConfigId: "cfg_1",
