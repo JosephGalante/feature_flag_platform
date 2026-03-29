@@ -1,10 +1,11 @@
 # Migrations
 
-This directory holds Kysely migration files for the platform schema.
+This directory holds Drizzle-generated SQL migrations and Drizzle metadata snapshots.
 
-Phase 0 intentionally scaffolds the migration runner and directory layout without adding schema migrations yet.
+The canonical workflow is:
 
-Migration file naming should stay lexicographically sortable, for example:
+1. Update the Drizzle schema in `packages/shared/src/database.ts`.
+2. Generate a SQL migration with `pnpm db:generate`.
+3. Apply migrations with `pnpm db:migrate`.
 
-- `20260329120000_initial_schema.ts`
-- `20260329123000_seed_demo_tenant.ts`
+When generated SQL is not enough, custom SQL can be added alongside the generated migration set.

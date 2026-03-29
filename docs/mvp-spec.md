@@ -96,7 +96,7 @@ This separation matters because:
 - Database: Postgres
 - Cache and projection store: Redis
 - Async jobs: Redis-backed queue or a simple polling worker
-- Query layer: Kysely
+- ORM and query layer: Drizzle ORM
 - Repository layout: pnpm workspaces monorepo
 
 This scope supports:
