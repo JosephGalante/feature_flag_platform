@@ -1,18 +1,15 @@
-import Fastify from "fastify";
-
-const app = Fastify({
-  logger: true,
-});
-
-const host = process.env.API_HOST ?? "0.0.0.0";
-const port = Number.parseInt(process.env.API_PORT ?? "4000", 10);
+import {buildApp} from "./app.js";
+import {readApiConfig} from "./config.js";
 
 const start = async () => {
+  const config = readApiConfig();
+  const app = await buildApp(config);
+
   try {
-    await app.listen({host, port});
-    app.log.info({host, port}, "API scaffold started");
+    await app.listen({host: config.host, port: config.port});
+    app.log.info({host: config.host, port: config.port}, "API started");
   } catch (error) {
-    app.log.error(error, "API scaffold failed to start");
+    app.log.error(error, "API failed to start");
     process.exitCode = 1;
   }
 };
