@@ -5,11 +5,14 @@ import {redirect} from "next/navigation";
 import {
   type AdminFlagRule,
   SESSION_COOKIE_NAME,
+  createApiKeyForEnvironment,
   getFlagDetail,
   loginAsAdmin,
   readCookieValue,
   replaceFlagConfiguration,
+  revokeApiKeyById,
 } from "../lib/admin-api";
+import {API_KEY_FLASH_COOKIE_NAME, encodeApiKeyFlash} from "../lib/api-key-flash";
 
 function readEmail(formData: FormData): string {
   const rawValue = formData.get("email");
@@ -63,6 +66,40 @@ function buildFlagDetailHref(input: {
   const queryString = query.toString();
 
   return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
+}
+
+function buildApiKeysHref(input: {
+  environmentId: string | null;
+  error?: string;
+  notice?: string;
+  organizationId: string | null;
+  projectId: string | null;
+}): string {
+  const query = new URLSearchParams();
+
+  if (input.organizationId) {
+    query.set("organizationId", input.organizationId);
+  }
+
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+
+  if (input.environmentId) {
+    query.set("environmentId", input.environmentId);
+  }
+
+  if (input.notice) {
+    query.set("notice", input.notice);
+  }
+
+  if (input.error) {
+    query.set("error", input.error);
+  }
+
+  const queryString = query.toString();
+
+  return `/console/api-keys${queryString.length > 0 ? `?${queryString}` : ""}`;
 }
 
 function toConfigurationRuleInput(rule: AdminFlagRule) {
@@ -271,6 +308,127 @@ export async function logoutAction(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
   redirect("/login");
+}
+
+export async function createApiKeyAction(formData: FormData): Promise<void> {
+  const environmentId = readRequiredField(formData, "environmentId");
+  const organizationId = readOptionalField(formData, "organizationId");
+  const projectId = readOptionalField(formData, "projectId");
+  const name = readRequiredField(formData, "name");
+
+  if (environmentId.length === 0 || name.length === 0) {
+    redirect(
+      buildApiKeysHref({
+        environmentId: environmentId || null,
+        error: "invalid_form",
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
+  const result = await createApiKeyForEnvironment(environmentId, name, sessionCookie).catch(() => {
+    redirect(
+      buildApiKeysHref({
+        environmentId,
+        error: "api_key_create_failed",
+        organizationId,
+        projectId,
+      }),
+    );
+  });
+
+  cookieStore.set({
+    httpOnly: true,
+    maxAge: 300,
+    name: API_KEY_FLASH_COOKIE_NAME,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    value: encodeApiKeyFlash({
+      keyPrefix: result.apiKey.keyPrefix,
+      name: result.apiKey.name,
+      rawKey: result.rawKey,
+    }),
+  });
+
+  redirect(
+    buildApiKeysHref({
+      environmentId,
+      notice: "api_key_created",
+      organizationId,
+      projectId,
+    }),
+  );
+}
+
+export async function revokeApiKeyAction(formData: FormData): Promise<void> {
+  const apiKeyId = readRequiredField(formData, "apiKeyId");
+  const environmentId = readRequiredField(formData, "environmentId");
+  const organizationId = readOptionalField(formData, "organizationId");
+  const projectId = readOptionalField(formData, "projectId");
+
+  if (apiKeyId.length === 0 || environmentId.length === 0) {
+    redirect(
+      buildApiKeysHref({
+        environmentId: environmentId || null,
+        error: "invalid_form",
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
+  await revokeApiKeyById(apiKeyId, sessionCookie).catch(() => {
+    redirect(
+      buildApiKeysHref({
+        environmentId,
+        error: "api_key_revoke_failed",
+        organizationId,
+        projectId,
+      }),
+    );
+  });
+
+  redirect(
+    buildApiKeysHref({
+      environmentId,
+      notice: "api_key_revoked",
+      organizationId,
+      projectId,
+    }),
+  );
+}
+
+export async function dismissApiKeyFlashAction(formData: FormData): Promise<void> {
+  const environmentId = readOptionalField(formData, "environmentId");
+  const organizationId = readOptionalField(formData, "organizationId");
+  const projectId = readOptionalField(formData, "projectId");
+  const cookieStore = await cookies();
+
+  cookieStore.delete(API_KEY_FLASH_COOKIE_NAME);
+
+  redirect(
+    buildApiKeysHref({
+      environmentId,
+      organizationId,
+      projectId,
+    }),
+  );
 }
 
 export async function updateFlagEnvironmentAction(formData: FormData): Promise<void> {

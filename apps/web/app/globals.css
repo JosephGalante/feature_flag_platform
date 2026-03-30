@@ -184,6 +184,7 @@ select {
 }
 
 .context-field select,
+.context-field input,
 .login-field input {
   width: 100%;
   border: 1px solid var(--border);
@@ -208,6 +209,12 @@ select {
   grid-template-columns: 1fr auto;
   align-items: end;
   margin-bottom: 1rem;
+}
+
+.table-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .table-wrap {
@@ -253,6 +260,11 @@ th {
 }
 
 .status-archived {
+  background: var(--danger-soft);
+  color: #8d3d2f;
+}
+
+.status-revoked {
   background: var(--danger-soft);
   color: #8d3d2f;
 }
@@ -309,6 +321,23 @@ th {
   color: #8d3d2f;
 }
 
+.flash-panel {
+  margin-bottom: 1rem;
+}
+
+.secret-value {
+  display: block;
+  overflow-x: auto;
+  margin-top: 1rem;
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  background: #f6f0e4;
+  color: #23403a;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .detail-stack {
   display: grid;
   gap: 1rem;
@@ -331,6 +360,13 @@ th {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.9rem;
+}
+
+.create-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.9rem;
+  align-items: end;
 }
 
 .rule-editor,
@@ -365,6 +401,22 @@ th {
 
 .environment-save-button {
   justify-self: start;
+}
+
+.create-button,
+.danger-button {
+  margin-top: 0;
+}
+
+.danger-button {
+  border-color: rgba(141, 61, 47, 0.18);
+  color: #8d3d2f;
+}
+
+.danger-button:hover,
+.danger-button:focus-visible {
+  border-color: rgba(141, 61, 47, 0.3);
+  background: var(--danger-soft);
 }
 
 .detail-block-header {
@@ -473,6 +525,7 @@ th {
     flex-direction: column;
   }
 
+  .create-form,
   .environment-form-grid {
     grid-template-columns: 1fr;
   }

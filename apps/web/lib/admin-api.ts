@@ -100,6 +100,19 @@ type AdminFlagDetail = {
   variants: AdminFlagVariant[];
 };
 
+type AdminApiKeySummary = {
+  createdAt: string;
+  environmentId: string;
+  id: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  name: string;
+  organizationId: string;
+  projectId: string;
+  revokedAt: string | null;
+  status: "active" | "revoked";
+};
+
 type AttributeMatchConfigurationRuleInput = {
   attributeKey: string;
   comparisonValue: string | string[];
@@ -158,6 +171,20 @@ type ReplaceFlagConfigurationRequest = {
 type ReplaceFlagConfigurationResponse = {
   changed: boolean;
   detail: AdminFlagDetail;
+};
+
+type ApiKeysResponse = {
+  apiKeys: AdminApiKeySummary[];
+  environment: AdminEnvironment & {organizationId: string};
+};
+
+type CreateApiKeyResponse = {
+  apiKey: AdminApiKeySummary;
+  rawKey: string;
+};
+
+type RevokeApiKeyResponse = {
+  apiKey: AdminApiKeySummary;
 };
 
 type LoginResponse = {
@@ -343,6 +370,72 @@ export async function replaceFlagConfiguration(
   }
 
   return response.data;
+}
+
+export async function getApiKeysForEnvironment(
+  environmentId: string,
+  sessionCookie?: string,
+): Promise<AdminApiKeySummary[]> {
+  const response = await apiFetch<ApiKeysResponse>(
+    `/api/admin/environments/${environmentId}/api-keys`,
+    {
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load API keys.");
+  }
+
+  return response.data.apiKeys;
+}
+
+export async function createApiKeyForEnvironment(
+  environmentId: string,
+  name: string,
+  sessionCookie?: string,
+): Promise<CreateApiKeyResponse> {
+  const response = await apiFetch<CreateApiKeyResponse>(
+    `/api/admin/environments/${environmentId}/api-keys`,
+    {
+      init: {
+        body: JSON.stringify({name}),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status !== 201 || !response.data) {
+    throw new Error("Failed to create API key.");
+  }
+
+  return response.data;
+}
+
+export async function revokeApiKeyById(
+  apiKeyId: string,
+  sessionCookie?: string,
+): Promise<AdminApiKeySummary> {
+  const response = await apiFetch<RevokeApiKeyResponse>(`/api/admin/api-keys/${apiKeyId}/revoke`, {
+    init: {
+      method: "POST",
+    },
+    ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+  });
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to revoke API key.");
+  }
+
+  return response.data.apiKey;
 }
 
 export function readCookieValue(setCookieHeader: string | null, cookieName: string): string | null {

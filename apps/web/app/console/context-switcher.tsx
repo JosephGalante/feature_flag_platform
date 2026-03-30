@@ -9,6 +9,7 @@ type SelectOption = {
 };
 
 type ContextSwitcherProps = {
+  basePath?: string;
   environments: SelectOption[];
   organizations: SelectOption[];
   projects: SelectOption[];
@@ -18,6 +19,7 @@ type ContextSwitcherProps = {
 };
 
 export function ContextSwitcher({
+  basePath = "/console",
   environments,
   organizations,
   projects,
@@ -49,7 +51,7 @@ export function ContextSwitcher({
 
     startTransition(() => {
       const query = nextParams.toString();
-      router.push(query.length > 0 ? `/console?${query}` : "/console");
+      router.push(query.length > 0 ? `${basePath}?${query}` : basePath);
     });
   }
 
