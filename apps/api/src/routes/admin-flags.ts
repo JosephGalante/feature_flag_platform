@@ -3,17 +3,18 @@ import type {JsonValue} from "@shared/json";
 import type {FastifyInstance} from "fastify";
 import {z} from "zod";
 import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../admin/auth";
+import {createFlag, replaceFlagConfiguration, updateFlagMetadata} from "../admin/flags";
+import type {
+  ConfigurationEnvironmentInput,
+  ConfigurationRuleInput,
+  ConfigurationVariantInput,
+  FlagDetail,
+} from "../admin/flags/flags.service";
 import {
-  type ConfigurationEnvironmentInput,
-  type ConfigurationRuleInput,
-  type ConfigurationVariantInput,
-  createFlag,
   findAuthorizedFlagAccess,
   getFlagDetail,
   listFlagsForProject,
-  replaceFlagConfiguration,
-  updateFlagMetadata,
-} from "../admin/flags";
+} from "../admin/flags/readModel";
 import {findAuthorizedProject, listEnvironmentsForProject} from "../admin/service";
 import type {ApiConfig} from "../config";
 import type {ApiDatabase} from "../lib/database";
@@ -112,7 +113,7 @@ function isKnownServiceError(
 }
 
 function validateConfigurationPayload(input: {
-  currentDetail: NonNullable<Awaited<ReturnType<typeof getFlagDetail>>>;
+  currentDetail: FlagDetail;
   environments: ConfigurationEnvironmentInput[];
   variants: ConfigurationVariantInput[];
 }): string[] {
@@ -132,7 +133,7 @@ function validateConfigurationPayload(input: {
     variantKeys.add(variant.key);
   }
 
-  const expectedEnvironmentIds = new Set(
+  const expectedEnvironmentIds = new Set<string>(
     input.currentDetail.environments.map((environment) => environment.environment.id),
   );
   const seenEnvironmentIds = new Set<string>();
