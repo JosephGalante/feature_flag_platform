@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {CompiledEnvironmentProjection} from "@feature-flag-platform/evaluation-core";
-import {previewFlagEvaluation} from "./preview-flag-evaluation";
+import {previewFlagBatchEvaluation, previewFlagEvaluation} from "./preview-flag-evaluation";
 
 const projection: CompiledEnvironmentProjection = {
   environmentId: "env_staging",
@@ -54,6 +54,23 @@ test("returns projection_not_found when Redis has no environment projection", as
   });
 });
 
+test("returns projection_not_found for batch evaluation when Redis has no environment projection", async () => {
+  const result = await previewFlagBatchEvaluation(
+    {
+      readProjection: async () => null,
+    },
+    {
+      context: {},
+      environmentId: "env_missing",
+      flagKeys: ["new_checkout"],
+    },
+  );
+
+  assert.deepEqual(result, {
+    status: "projection_not_found",
+  });
+});
+
 test("evaluates the requested flag against the loaded Redis projection", async () => {
   const result = await previewFlagEvaluation(
     {
@@ -76,6 +93,43 @@ test("evaluates the requested flag against the loaded Redis projection", async (
       reason: "RULE_MATCH",
       value: true,
       variantKey: "on",
+    },
+    status: "ok",
+  });
+});
+
+test("evaluates multiple flags against the loaded Redis projection", async () => {
+  const result = await previewFlagBatchEvaluation(
+    {
+      readProjection: async () => projection,
+    },
+    {
+      context: {
+        email: "alice@example.com",
+      },
+      environmentId: "env_staging",
+      flagKeys: ["new_checkout", "missing_flag"],
+    },
+  );
+
+  assert.deepEqual(result, {
+    result: {
+      missing_flag: {
+        flagKey: "missing_flag",
+        matchedRuleId: null,
+        projectionVersion: null,
+        reason: "FLAG_NOT_FOUND",
+        value: null,
+        variantKey: null,
+      },
+      new_checkout: {
+        flagKey: "new_checkout",
+        matchedRuleId: "rule_email",
+        projectionVersion: 7,
+        reason: "RULE_MATCH",
+        value: true,
+        variantKey: "on",
+      },
     },
     status: "ok",
   });
