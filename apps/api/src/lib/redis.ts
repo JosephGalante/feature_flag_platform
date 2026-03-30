@@ -160,11 +160,21 @@ export async function sendRedisCommand(
   const command = encodeRedisCommand(argumentsList);
 
   return await new Promise<RedisReply>((resolve, reject) => {
-    const socket = useTls ? tls.connect({host, port}) : net.createConnection({host, port});
+    const socket = useTls
+      ? tls.connect({
+          host,
+          port,
+          servername: host,
+        })
+      : net.createConnection({host, port});
     let responseBuffer = Buffer.alloc(0);
     let connected = false;
     let settled = false;
     let stage: "auth" | "command" = authArguments ? "auth" : "command";
+    const writeInitialCommand = (): void => {
+      connected = true;
+      socket.write(authArguments ? encodeRedisCommand(authArguments) : command);
+    };
 
     const settleError = (error: Error): void => {
       if (settled) {
@@ -240,14 +250,15 @@ export async function sendRedisCommand(
       processReplies();
     });
 
-    socket.once("connect", () => {
-      connected = true;
-      socket.write(authArguments ? encodeRedisCommand(authArguments) : command);
-    });
+    if (useTls) {
+      socket.once("secureConnect", writeInitialCommand);
+    } else {
+      socket.once("connect", writeInitialCommand);
+    }
   });
 }
 
-export async function pingRedis(redisUrl: string, timeoutMs = 1000): Promise<void> {
+export async function pingRedis(redisUrl: string, timeoutMs = 5000): Promise<void> {
   const reply = await sendRedisCommand(redisUrl, ["PING"], timeoutMs);
 
   if (reply.kind === "simple_string" && reply.value === "PONG") {
