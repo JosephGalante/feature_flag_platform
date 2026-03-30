@@ -1,92 +1,176 @@
 # Feature Flag Platform
 
-Status: planning and specification only. This repository currently contains canonical docs for the MVP and does not yet contain implementation code.
+Multi-tenant feature flag platform with a Postgres-backed control plane, Redis-backed data plane, transactional outbox propagation, reconciliation, and a thin JavaScript SDK.
 
-## Overview
+## Current Status
 
-This project is a serious V1 multi-tenant feature flag platform for internal B2B-style usage.
+This repo is implemented, not just planned.
 
-It is intentionally:
+Current MVP surfaces:
 
-- not a toy toggle app
-- not a LaunchDarkly clone
-- focused on strong domain modeling, deterministic evaluation, and operational correctness
+- admin API for organizations, projects, environments, flags, audit logs, and API keys
+- Next.js admin UI for login, context switching, flag management, preview evaluation, API keys, and audit history
+- Redis-backed public evaluation API for one or many flags
+- worker-driven outbox processing and reconciliation
+- thin JS SDK with `evaluate()` and `evaluateMany()`
 
-The core system story is:
+## Architecture
 
-- admins manage flags and rollout configuration through a control plane backed by Postgres
-- applications evaluate flags through a data plane backed by Redis environment projections
-- async propagation is handled through a transactional outbox, a worker, and reconciliation
+The system is intentionally split into two planes:
 
-## Canonical Docs
+- Control plane: admins write source-of-truth configuration to Postgres.
+- Data plane: applications evaluate flags from compiled environment projections stored in Redis.
 
-- [docs/mvp-spec.md](docs/mvp-spec.md): product scope, stack, repo layout, and package responsibilities
-- [docs/domain-model.md](docs/domain-model.md): canonical tables, enums, constraints, and Redis projection model
-- [docs/architecture.md](docs/architecture.md): control plane and data plane design, evaluator behavior, propagation, recovery, and tradeoffs
-- [docs/api.md](docs/api.md): admin API, evaluation API, auth model, and response contracts
-- [docs/build-plan.md](docs/build-plan.md): exact phased implementation order and deferred scope
-- [docs/acceptance-demo.md](docs/acceptance-demo.md): MVP success criteria and end-to-end demo flow
+Important implementation rules:
 
-## MVP Summary
+- Postgres is authoritative.
+- Redis is rebuildable and not authoritative.
+- evaluation logic lives in `packages/evaluation-core`
+- evaluation-affecting writes append audit rows and outbox rows transactionally
+- the worker rebuilds full environment projections
+- reconciliation repairs missing or stale Redis state
 
-The MVP must support:
+## Repo Layout
 
-- organizations, projects, and environments
-- simple org-scoped RBAC for the admin UI and admin API
-- feature flag CRUD
-- per-environment flag configuration
-- boolean and variant flags
-- ordered targeting rules
-- deterministic percentage rollout
-- evaluation API
-- thin JavaScript SDK wrapper around the evaluation API
-- Redis-backed environment projections for low-latency reads
-- transactional outbox propagation
-- worker-driven projection rebuilds
-- append-only audit logs
-- reconciliation to repair or rebuild projections from Postgres
-- a basic admin UI for managing flags, API keys, audit history, and preview evaluation
+```text
+apps/
+  api/
+  web/
+  worker/
 
-## Explicit Non-Goals
+packages/
+  config/
+  evaluation-core/
+  sdk-js/
+  shared/
 
-The MVP intentionally excludes:
+infra/
+  docker/
+  migrations/
 
-- segments
-- scheduled rollouts
-- exposure event ingestion
-- analytics dashboards
-- environment diff view
-- DLQ admin UI
-- replay UI
-- OpenFeature compliance
-- streaming SDK connections
-- client-side local evaluation
-- advanced policy inheritance
-- SSO and SAML
-- billing
-- mobile SDKs
-- multi-region design
+docs/
+```
 
-## Design Principles
+## Local Run
 
-- Postgres is the source of truth.
-- Redis is a rebuildable projection, not an authoritative store.
-- Evaluation logic lives in a pure shared package with no IO coupling.
-- Any write that changes evaluation behavior must update source rows, bump projection versions, write an audit row, and enqueue outbox work in one database transaction.
-- The worker should rebuild full environment projections rather than maintain partial Redis patches.
-- Reconciliation is a first-class recovery mechanism, not an afterthought.
+Short version:
 
-## Target Demo
+```bash
+pnpm install
+cp .env.example .env
+docker compose --env-file .env -f infra/docker/docker-compose.yml up -d
+pnpm db:migrate
+pnpm db:seed
+```
 
-The expected MVP demo is:
+Start the API:
 
-1. Log into a seeded admin UI.
-2. Open a project and choose the `staging` environment.
-3. Create a flag called `new_checkout`.
-4. Set the default variant to `off`.
-5. Add an allowlist rule for specific emails and a `20%` rollout rule.
-6. Save configuration and show the append-only audit entry.
-7. Explain that Postgres is the source of truth and Redis updates asynchronously through the outbox worker.
-8. Preview evaluations for sample users and show deterministic, explainable results.
-9. Evaluate through the API or JS SDK.
-10. Optionally show Redis projection freshness or reconciliation behavior.
+```bash
+set -a
+source .env
+set +a
+export SESSION_SECRET=dev-session-secret
+pnpm --filter @feature-flag-platform/api dev
+```
+
+Start the web app in another terminal:
+
+```bash
+set -a
+source .env
+set +a
+export API_BASE_URL=http://127.0.0.1:${API_PORT}
+pnpm --filter @feature-flag-platform/web exec next dev --hostname 127.0.0.1 --port ${WEB_PORT}
+```
+
+Start the worker in another terminal:
+
+```bash
+set -a
+source .env
+set +a
+pnpm --filter @feature-flag-platform/worker start
+```
+
+Open:
+
+- web UI: `http://127.0.0.1:3000/login`
+- API readiness: `http://127.0.0.1:4000/health/ready`
+
+Seeded admin:
+
+- `owner@acme.test`
+
+For the fuller walkthrough, see [docs/local-development.md](docs/local-development.md).
+
+## Public Runtime API
+
+Single flag:
+
+```http
+POST /api/evaluate
+x-api-key: <environment-api-key>
+content-type: application/json
+```
+
+```json
+{
+  "flagKey": "new_checkout",
+  "context": {
+    "userId": "user_123",
+    "email": "alice@example.com"
+  }
+}
+```
+
+Batch:
+
+```http
+POST /api/evaluate/batch
+x-api-key: <environment-api-key>
+content-type: application/json
+```
+
+```json
+{
+  "flagKeys": ["new_checkout", "new_nav"],
+  "context": {
+    "userId": "user_123",
+    "email": "alice@example.com"
+  }
+}
+```
+
+See [docs/api.md](docs/api.md) for the full contract.
+
+## JS SDK
+
+```ts
+import {FeatureFlagClient} from "@feature-flag-platform/sdk-js";
+
+const client = new FeatureFlagClient({
+  apiKey: process.env.FLAG_API_KEY!,
+  baseUrl: "http://127.0.0.1:4000",
+});
+
+const single = await client.evaluate("new_checkout", {
+  email: "alice@example.com",
+  userId: "user_123",
+});
+
+const many = await client.evaluateMany(["new_checkout", "new_nav"], {
+  email: "alice@example.com",
+  userId: "user_123",
+});
+```
+
+## Docs
+
+- [docs/mvp-spec.md](docs/mvp-spec.md)
+- [docs/domain-model.md](docs/domain-model.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/api.md](docs/api.md)
+- [docs/build-plan.md](docs/build-plan.md)
+- [docs/acceptance-demo.md](docs/acceptance-demo.md)
+- [docs/local-development.md](docs/local-development.md)
+- [docs/rationale.md](docs/rationale.md)

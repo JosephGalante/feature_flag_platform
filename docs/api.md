@@ -45,6 +45,12 @@ type EvaluationResult = {
 
 The response must be explainable enough to support admin previews and operational debugging.
 
+Canonical batch result:
+
+```ts
+type EvaluationBatchResult = Record<string, EvaluationResult>;
+```
+
 ## Admin Routes
 
 ### Session and Current User
@@ -369,7 +375,7 @@ Flow:
 - evaluate
 - return the explainable result
 
-### `POST /api/evaluate/bulk`
+### `POST /api/evaluate/batch`
 
 Purpose:
 
@@ -394,9 +400,57 @@ Body:
 
 Response:
 
-- a collection of explainable evaluation results for each requested flag
+- a keyed object of explainable evaluation results for each requested flag
 
-Bulk evaluation stays in scope because it is realistic and only modestly more complex if the evaluator is clean.
+Conceptual response:
+
+```json
+{
+  "new_checkout": {
+    "flagKey": "new_checkout",
+    "variantKey": "on",
+    "value": true,
+    "reason": "RULE_MATCH",
+    "matchedRuleId": "rule_allowlist",
+    "projectionVersion": 12
+  },
+  "new_nav": {
+    "flagKey": "new_nav",
+    "variantKey": "off",
+    "value": false,
+    "reason": "DEFAULT",
+    "matchedRuleId": null,
+    "projectionVersion": 12
+  }
+}
+```
+
+Batch evaluation stays in scope because it is realistic and only modestly more complex if the evaluator is clean.
+
+## JS SDK
+
+`packages/sdk-js` is a thin wrapper around the public evaluation API.
+
+Example:
+
+```ts
+import {FeatureFlagClient} from "@feature-flag-platform/sdk-js";
+
+const client = new FeatureFlagClient({
+  apiKey: process.env.FLAG_API_KEY!,
+  baseUrl: "http://127.0.0.1:4000",
+});
+
+const single = await client.evaluate("new_checkout", {
+  email: "alice@example.com",
+  userId: "user_123",
+});
+
+const many = await client.evaluateMany(["new_checkout", "new_nav"], {
+  email: "alice@example.com",
+  userId: "user_123",
+});
+```
 
 ## Health and Internal Routes
 
