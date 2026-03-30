@@ -20,7 +20,7 @@ type ReconciliationRepairDependencies = ReconciliationScanDependencies & {
   rebuildProjection: typeof rebuildEnvironmentProjection;
 };
 
-export type EnvironmentProjectionHealth = {
+type EnvironmentProjectionHealth = {
   environmentId: string;
   postgresProjectionVersion: number;
   redisProjectionVersion: number | null;
@@ -31,13 +31,13 @@ type EnvironmentProjectionNeedingRepair = EnvironmentProjectionHealth & {
   status: "missing" | "stale";
 };
 
-export type RepairedEnvironmentProjection = {
+type RepairedEnvironmentProjection = {
   environmentId: string;
   repairedProjectionVersion: number;
   previousStatus: "missing" | "stale";
 };
 
-export type ReconciliationRepairResult = {
+type ReconciliationRepairResult = {
   failedEnvironmentIds: string[];
   repairedEnvironments: RepairedEnvironmentProjection[];
   skippedCount: number;
@@ -53,7 +53,7 @@ const defaultRepairDependencies: ReconciliationRepairDependencies = {
   rebuildProjection: rebuildEnvironmentProjection,
 };
 
-export async function listEnvironmentProjectionVersions(
+async function listEnvironmentProjectionVersions(
   db: WorkerDatabase,
 ): Promise<EnvironmentProjectionVersionRow[]> {
   return await db

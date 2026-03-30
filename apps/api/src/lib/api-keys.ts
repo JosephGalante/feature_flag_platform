@@ -16,7 +16,7 @@ type GeneratedApiKey = {
   rawKey: string;
 };
 
-export type ParsedApiKey = {
+type ParsedApiKey = {
   keyHash: string;
   keyPrefix: string;
   rawKey: string;

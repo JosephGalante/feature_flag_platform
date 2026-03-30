@@ -6,7 +6,7 @@ import {
 } from "../lib/redis-projections";
 import {buildEnvironmentProjection} from "./environment-projection";
 
-export type RebuildEnvironmentProjectionDependencies = {
+type RebuildEnvironmentProjectionDependencies = {
   buildProjection: (
     environmentId: string,
     generatedAt: Date,
@@ -14,7 +14,7 @@ export type RebuildEnvironmentProjectionDependencies = {
   writeProjection: (projection: CompiledEnvironmentProjection) => Promise<void>;
 };
 
-export type RebuildEnvironmentProjectionResult = {
+type RebuildEnvironmentProjectionResult = {
   projection: CompiledEnvironmentProjection;
   redisKey: string;
 };

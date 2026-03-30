@@ -3,7 +3,7 @@ import {config as loadEnv} from "dotenv";
 
 loadEnv();
 
-export type WorkerConfig = {
+type WorkerConfig = {
   databaseUrl: string;
   pollIntervalMs: number;
   reconciliationIntervalMs: number;

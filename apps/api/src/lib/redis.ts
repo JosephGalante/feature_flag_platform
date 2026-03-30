@@ -1,6 +1,6 @@
 import net from "node:net";
 
-export type RedisReply =
+type RedisReply =
   | {kind: "bulk_string"; value: string}
   | {kind: "error"; value: string}
   | {kind: "integer"; value: number}

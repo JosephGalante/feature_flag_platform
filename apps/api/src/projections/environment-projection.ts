@@ -138,7 +138,7 @@ export function compileEnvironmentProjection(
   };
 }
 
-export async function getEnvironmentProjectionSource(
+async function getEnvironmentProjectionSource(
   db: ApiDatabase,
   environmentId: string,
 ): Promise<EnvironmentProjectionSource | null> {

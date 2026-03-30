@@ -24,13 +24,13 @@ type ProjectionRefreshPayload = {
   triggeredByUserId?: string;
 };
 
-export type ProcessProjectionRefreshOutcome =
+type ProcessProjectionRefreshOutcome =
   | {eventId: string; status: "failed"}
   | {status: "idle"}
   | {eventId: string; status: "published"}
   | {eventId: string; status: "retried"};
 
-export type ProcessProjectionRefreshBatchResult = {
+type ProcessProjectionRefreshBatchResult = {
   failedCount: number;
   publishedCount: number;
   retriedCount: number;

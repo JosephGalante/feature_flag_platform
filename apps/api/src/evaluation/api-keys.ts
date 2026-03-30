@@ -3,7 +3,7 @@ import {and, eq} from "drizzle-orm";
 import {parseApiKey} from "../lib/api-keys";
 import type {ApiDatabase} from "../lib/database";
 
-export type EvaluationApiKeyAccess = {
+type EvaluationApiKeyAccess = {
   apiKeyId: string;
   environmentId: string;
   keyPrefix: string;

@@ -5,11 +5,11 @@ import {
   evaluateFlag,
 } from "@feature-flag-platform/evaluation-core";
 
-export type PreviewFlagEvaluationDependencies = {
+type PreviewFlagEvaluationDependencies = {
   readProjection: (environmentId: string) => Promise<CompiledEnvironmentProjection | null>;
 };
 
-export type PreviewFlagEvaluationResult =
+type PreviewFlagEvaluationResult =
   | {
       result: EvaluationResult;
       status: "ok";
