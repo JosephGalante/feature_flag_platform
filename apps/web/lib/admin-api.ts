@@ -25,6 +25,20 @@ type AuthenticatedAdmin = {
   user: AdminUser;
 };
 
+type AdminFlagSummary = {
+  createdAt: string;
+  createdByUserId: string;
+  description: string | null;
+  flagType: "boolean" | "variant";
+  id: string;
+  key: string;
+  name: string;
+  organizationId: string;
+  projectId: string;
+  status: "active" | "archived";
+  updatedAt: string;
+};
+
 type AdminProject = {
   createdAt: string;
   id: string;
@@ -42,18 +56,48 @@ type AdminEnvironment = {
   sortOrder: number;
 };
 
-type AdminFlagSummary = {
+export type AdminFlagRule = {
+  attributeKey: string | null;
+  comparisonValue: unknown;
   createdAt: string;
-  createdByUserId: string;
+  id: string;
+  operator: string | null;
+  rolloutPercentage: number | null;
+  ruleType: string;
+  sortOrder: number;
+  variantKey: string;
+};
+
+type AdminFlagVariant = {
   description: string | null;
-  flagType: "boolean" | "variant";
   id: string;
   key: string;
-  name: string;
-  organizationId: string;
-  projectId: string;
-  status: "active" | "archived";
-  updatedAt: string;
+  value: unknown;
+};
+
+type AdminFlagEnvironment = {
+  config: {
+    defaultVariantKey: string;
+    enabled: boolean;
+    id: string;
+    projectionVersion: number;
+    updatedAt: string;
+    updatedByUserId: string;
+  };
+  environment: {
+    createdAt: string;
+    id: string;
+    key: string;
+    name: string;
+    sortOrder: number;
+  };
+  rules: AdminFlagRule[];
+};
+
+export type AdminFlagDetail = {
+  environments: AdminFlagEnvironment[];
+  flag: AdminFlagSummary;
+  variants: AdminFlagVariant[];
 };
 
 type ProjectsResponse = {
@@ -70,6 +114,8 @@ type FlagsResponse = {
   flags: AdminFlagSummary[];
   project: AdminProject;
 };
+
+type FlagDetailResponse = AdminFlagDetail;
 
 type LoginResponse = {
   memberships: AdminMembership[];
@@ -209,6 +255,25 @@ export async function getFlagsForProject(
   }
 
   return response.data.flags;
+}
+
+export async function getFlagDetail(
+  flagId: string,
+  sessionCookie?: string,
+): Promise<AdminFlagDetail | null> {
+  const response = await apiFetch<FlagDetailResponse>(`/api/admin/flags/${flagId}`, {
+    ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load flag detail.");
+  }
+
+  return response.data;
 }
 
 export function readCookieValue(setCookieHeader: string | null, cookieName: string): string | null {

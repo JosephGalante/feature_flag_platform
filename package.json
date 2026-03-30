@@ -9,7 +9,7 @@
   },
   "scripts": {
     "syntax": "tsc --noEmit",
-    "check": "pnpm syntax && pnpm lint && pnpm typecheck && pnpm knip",
+    "check": "pnpm syntax && pnpm format && pnpm lint && pnpm typecheck && pnpm knip",
     "knip": "knip",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

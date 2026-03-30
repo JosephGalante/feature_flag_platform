@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin-api";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
+import Link from "next/link";
 import {redirect} from "next/navigation";
 
 type ConsolePageProps = {
@@ -30,6 +31,31 @@ function formatTimestamp(value: string): string {
   }).format(new Date(value));
 }
 
+function buildFlagDetailHref(input: {
+  environmentId: string | null;
+  flagId: string;
+  organizationId: string | null;
+  projectId: string | null;
+}): string {
+  const query = new URLSearchParams();
+
+  if (input.organizationId) {
+    query.set("organizationId", input.organizationId);
+  }
+
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+
+  if (input.environmentId) {
+    query.set("environmentId", input.environmentId);
+  }
+
+  const queryString = query.toString();
+
+  return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
+}
+
 export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
@@ -44,27 +70,24 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const selectedOrganizationId =
     readParam(params.organizationId) ?? organizations[0]?.organizationId ?? null;
   const selectedOrganization =
-    organizations.find((organization) => organization.organizationId === selectedOrganizationId) ??
+    organizations.find(({organizationId}) => organizationId === selectedOrganizationId) ??
     organizations[0] ??
     null;
   const projects = selectedOrganization
     ? await getProjectsForOrganization(selectedOrganization.organizationId, sessionCookie)
     : [];
   const selectedProjectId = readParam(params.projectId) ?? projects[0]?.id ?? null;
-  const selectedProject =
-    projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const selectedProject = projects.find(({id}) => id === selectedProjectId) ?? projects[0] ?? null;
   const environments = selectedProject
     ? await getEnvironmentsForProject(selectedProject.id, sessionCookie)
     : [];
   const selectedEnvironmentId =
     readParam(params.environmentId) ??
-    environments.find((environment) => environment.key === "staging")?.id ??
+    environments.find(({key}) => key === "staging")?.id ??
     environments[0]?.id ??
     null;
   const selectedEnvironment =
-    environments.find((environment) => environment.id === selectedEnvironmentId) ??
-    environments[0] ??
-    null;
+    environments.find(({id}) => id === selectedEnvironmentId) ?? environments[0] ?? null;
   const flags = selectedProject ? await getFlagsForProject(selectedProject.id, sessionCookie) : [];
 
   return (
@@ -138,7 +161,7 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
             <h2>Project inventory</h2>
           </div>
           <p className="table-hint">
-            Next slice: flag detail and edit surfaces for the selected environment.
+            This slice adds a linked read-only detail view. Edit controls come next.
           </p>
         </div>
 
@@ -163,7 +186,17 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
                 {flags.map((flag) => (
                   <tr key={flag.id}>
                     <td>
-                      <div className="flag-name">{flag.name}</div>
+                      <Link
+                        className="flag-link"
+                        href={buildFlagDetailHref({
+                          environmentId: selectedEnvironment?.id ?? null,
+                          flagId: flag.id,
+                          organizationId: selectedOrganization?.organizationId ?? null,
+                          projectId: selectedProject?.id ?? null,
+                        })}
+                      >
+                        <div className="flag-name">{flag.name}</div>
+                      </Link>
                       <div className="flag-description">
                         {flag.description ?? "No description yet."}
                       </div>

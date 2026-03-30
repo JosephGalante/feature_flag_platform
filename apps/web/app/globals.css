@@ -47,6 +47,7 @@ select {
 }
 
 .hero,
+.detail-header,
 .summary-grid,
 .context-grid {
   display: grid;
@@ -55,6 +56,12 @@ select {
 
 .hero {
   grid-template-columns: 1.5fr 1fr;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.detail-header {
+  grid-template-columns: 1fr auto;
   align-items: start;
   margin-bottom: 1rem;
 }
@@ -148,8 +155,15 @@ select {
 }
 
 .context-panel,
-.table-panel {
+.table-panel,
+.detail-panel {
   margin-top: 1rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 1rem;
 }
 
 .context-grid,
@@ -225,6 +239,17 @@ th {
   font-weight: 700;
 }
 
+.flag-link {
+  text-decoration: none;
+}
+
+.flag-link:hover .flag-name,
+.flag-link:focus-visible .flag-name {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
 .status-pill {
   display: inline-flex;
   border-radius: 999px;
@@ -245,6 +270,87 @@ th {
 
 .empty-state {
   padding: 2rem 0.5rem 0.5rem;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-back-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.detail-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.detail-block {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.detail-block-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 0.75rem;
+}
+
+.detail-block-header h3 {
+  margin: 0;
+}
+
+.detail-block-header p,
+.detail-inline-meta,
+.empty-inline {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+}
+
+.detail-inline-meta {
+  font-size: 0.92rem;
+}
+
+.environment-card.is-selected {
+  border-color: rgba(23, 107, 90, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(23, 107, 90, 0.18);
+}
+
+.json-block {
+  margin: 0;
+  overflow-x: auto;
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  background: #f6f0e4;
+  color: #23403a;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.rule-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.rule-list li {
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.rule-order {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .login-shell {
@@ -282,10 +388,16 @@ th {
 
 @media (max-width: 900px) {
   .hero,
+  .detail-header,
+  .detail-grid,
   .login-layout,
   .summary-grid,
   .context-grid,
   .table-header {
     grid-template-columns: 1fr;
+  }
+
+  .detail-block-header {
+    flex-direction: column;
   }
 }
