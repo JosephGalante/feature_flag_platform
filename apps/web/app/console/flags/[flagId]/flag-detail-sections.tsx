@@ -5,12 +5,12 @@ import {
 } from "@/app/actions";
 import type {AdminPreviewEvaluationResult, getFlagDetail} from "@/lib/admin-api";
 import type {ConsoleContextQuery} from "@/lib/console-hrefs";
+import {formatTimestamp} from "@/lib/utils";
 import Link from "next/link";
 import {
   buildEditableAttributeSlots,
   buildEditableRolloutSlots,
   formatJson,
-  formatTimestamp,
 } from "./flag-detail-utils";
 
 type FlagDetail = NonNullable<Awaited<ReturnType<typeof getFlagDetail>>>;

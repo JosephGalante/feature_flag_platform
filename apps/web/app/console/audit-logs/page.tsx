@@ -14,6 +14,7 @@ import {
   readSearchParam,
 } from "@/lib/console-hrefs";
 import type {SearchParams} from "@/lib/types";
+import {formatTimestamp} from "@/lib/utils";
 import {cookies} from "next/headers";
 import Link from "next/link";
 import {redirect} from "next/navigation";
@@ -37,13 +38,6 @@ function readPositiveInteger(value: string | string[] | undefined, fallback: num
   }
 
   return parsedValue;
-}
-
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function formatEntityType(value: string): string {

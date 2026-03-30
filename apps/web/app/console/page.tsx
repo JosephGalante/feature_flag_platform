@@ -14,6 +14,7 @@ import {
   readSearchParam,
 } from "@/lib/console-hrefs";
 import type {SearchParams} from "@/lib/types";
+import {formatTimestamp} from "@/lib/utils";
 import {cookies} from "next/headers";
 import Link from "next/link";
 import {redirect} from "next/navigation";
@@ -21,13 +22,6 @@ import {redirect} from "next/navigation";
 type ConsolePageProps = {
   searchParams?: Promise<SearchParams>;
 };
-
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 
 function readErrorMessage(value: string | string[] | undefined): string | null {
   switch (readSearchParam(value)) {

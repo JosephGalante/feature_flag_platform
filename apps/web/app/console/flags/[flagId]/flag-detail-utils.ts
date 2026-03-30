@@ -1,13 +1,6 @@
 import type {AdminFlagRule} from "@/lib/admin-api";
 import {readSearchParam} from "@/lib/console-hrefs";
 
-export function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 export function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
