@@ -676,6 +676,10 @@ th {
   color: #8d3d2f;
 }
 
+.login-panel form .primary-button {
+  margin-top: 0.5rem;
+}
+
 .login-hint {
   margin-top: 1rem;
   color: var(--muted);

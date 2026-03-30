@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Feature Flag Platform Admin",
-  description: "Phase 4 admin console",
+  description: "Feature Flag Platform admin console",
 };
 
 type RootLayoutProps = {

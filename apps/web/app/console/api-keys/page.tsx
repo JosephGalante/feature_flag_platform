@@ -93,7 +93,6 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
     <main className="shell">
       <section className="detail-header">
         <div>
-          <p className="eyebrow">Phase 4 / Slice 6</p>
           <h1>API Keys</h1>
           <p className="hero-copy">
             Manage environment-scoped server keys from the admin UI. New keys reveal their raw value

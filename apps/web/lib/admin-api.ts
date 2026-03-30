@@ -100,6 +100,10 @@ type AdminFlagDetail = {
   variants: AdminFlagVariant[];
 };
 
+export type FlagVariantDetail = AdminFlagVariant;
+export type FlagEnvironmentDetail = AdminFlagEnvironment;
+export type FlagDetail = AdminFlagDetail;
+
 export type AdminPreviewEvaluationResult = {
   flagKey: string;
   matchedRuleId: string | null;

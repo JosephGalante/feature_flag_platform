@@ -1,3 +1,9 @@
+import FlagDetailHeader from "@/components/flag-detail-header";
+import FlagEnvironmentsPanel from "@/components/flag-environments-panel";
+import FlagMetadataPanel from "@/components/flag-metadata-panel";
+import FlagPreviewPanel from "@/components/flag-preview-panel";
+import FlagSummaryCards from "@/components/flag-summary-cards";
+import FlagVariantsPanel from "@/components/flag-variants-panel";
 import {
   type AdminPreviewEvaluationResult,
   SESSION_COOKIE_NAME,
@@ -9,14 +15,6 @@ import {buildConsoleHref, buildFlagDetailHref, readSearchParam} from "@/lib/cons
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
 import {notFound, redirect} from "next/navigation";
-import {
-  FlagDetailHeader,
-  FlagEnvironmentsPanel,
-  FlagMetadataPanel,
-  FlagPreviewPanel,
-  FlagSummaryCards,
-  FlagVariantsPanel,
-} from "./flag-detail-sections";
 import {
   parsePreviewContext,
   readFlagDetailErrorMessage,

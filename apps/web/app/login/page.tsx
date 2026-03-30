@@ -41,7 +41,6 @@ export default async function LoginPage({searchParams}: LoginPageProps) {
     <main className="login-shell">
       <section className="login-layout">
         <div className="login-copy">
-          <p className="eyebrow">Phase 4 / Slice 1</p>
           <h1>Feature Flag Platform</h1>
           <p>
             The web app now authenticates against the admin API, keeps a session cookie on the web

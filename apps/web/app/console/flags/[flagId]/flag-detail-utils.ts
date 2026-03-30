@@ -1,15 +1,31 @@
 import type {AdminFlagRule} from "@/lib/admin-api";
 import {readSearchParam} from "@/lib/console-hrefs";
 
-export function formatJson(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
-
-export function buildEditableRolloutSlots(rules: AdminFlagRule[]): Array<{
+type EditableRolloutSlot = {
   id: string;
   rolloutPercentage: number | null;
   variantKey: string;
-}> {
+};
+
+type EditableAttributeSlot = {
+  attributeKey: string;
+  comparisonValue: string;
+  id: string;
+  operator: "equals" | "in";
+  variantKey: string;
+};
+
+type PreviewErrorMessage = {
+  error: "invalid_preview_context" | "invalid_preview_json";
+};
+
+type PreviewContext = {
+  context: Record<string, string>;
+};
+
+type PreviewContextResponse = PreviewContext | PreviewErrorMessage;
+
+export function buildEditableRolloutSlots(rules: AdminFlagRule[]): EditableRolloutSlot[] {
   const rolloutRules = rules
     .filter((rule) => rule.ruleType === "percentage_rollout")
     .map((rule) => ({
@@ -28,13 +44,7 @@ export function buildEditableRolloutSlots(rules: AdminFlagRule[]): Array<{
   ];
 }
 
-export function buildEditableAttributeSlots(rules: AdminFlagRule[]): Array<{
-  attributeKey: string;
-  comparisonValue: string;
-  id: string;
-  operator: "equals" | "in";
-  variantKey: string;
-}> {
+export function buildEditableAttributeSlots(rules: AdminFlagRule[]): EditableAttributeSlot[] {
   const attributeRules = rules
     .filter((rule) => rule.ruleType === "attribute_match")
     .map((rule) => ({
@@ -103,15 +113,13 @@ export function readFlagDetailErrorMessage(value: string | string[] | undefined)
   }
 }
 
-export function parsePreviewContext(
-  value: string | null,
-): {context: Record<string, string>} | {error: "invalid_preview_context" | "invalid_preview_json"} {
+export function parsePreviewContext(value: string | null): PreviewContextResponse {
   if (!value || value.trim().length === 0) {
     return {context: {}};
   }
 
   try {
-    const parsed = JSON.parse(value) as unknown;
+    const parsed = JSON.parse(value);
 
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return {error: "invalid_preview_context"};

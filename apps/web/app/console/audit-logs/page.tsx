@@ -163,7 +163,6 @@ export default async function AuditLogsPage({searchParams}: AuditLogsPageProps) 
     <main className="shell">
       <section className="detail-header">
         <div>
-          <p className="eyebrow">Phase 4 / Slice 7</p>
           <h1>Audit Log</h1>
           <p className="hero-copy">
             Review append-only control-plane activity for the current tenant context. This feed is

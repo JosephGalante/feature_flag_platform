@@ -75,7 +75,6 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
     <main className="shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">Phase 4 / Slice 1</p>
           <h1>Admin Console</h1>
           <p className="hero-copy">
             Login, tenant switching, and the first live control-plane view are now wired against the
