@@ -10,10 +10,12 @@
   "scripts": {
     "syntax": "tsc --noEmit",
     "check": "pnpm syntax && pnpm format && pnpm lint && pnpm typecheck && pnpm knip",
+    "ci": "pnpm syntax && pnpm lint && pnpm typecheck && pnpm test && pnpm knip",
     "knip": "knip",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "test": "pnpm --filter @feature-flag-platform/evaluation-core test && pnpm --filter @feature-flag-platform/sdk-js test && pnpm --filter @feature-flag-platform/api test && pnpm --filter @feature-flag-platform/worker test",
     "typecheck": "pnpm -r typecheck",
     "test:evaluation-core": "pnpm --filter @feature-flag-platform/evaluation-core test",
     "dev:web": "pnpm --filter @feature-flag-platform/web dev",

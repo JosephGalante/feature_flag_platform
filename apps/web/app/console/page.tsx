@@ -40,10 +40,15 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
   const admin = await getCurrentAdmin(sessionCookie);
 
-  if (!admin || !sessionCookie) {
-    redirect("/login");
+  if (!admin) {
+    redirect("/login?error=session_expired");
   }
 
   const organizations = admin.memberships;
@@ -77,8 +82,8 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
         <div>
           <h1>Admin Console</h1>
           <p className="hero-copy">
-            Login, tenant switching, and the first live control-plane view are now wired against the
-            API instead of placeholder copy.
+            Explore organizations, projects, environments, and feature flags through the live admin
+            API.
           </p>
         </div>
 
@@ -244,7 +249,7 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
         {flags.length === 0 ? (
           <div className="empty-state">
             <p>No flags exist in this project yet.</p>
-            <span>Create a flag through the API or the next UI slice.</span>
+            <span>Create a flag here to seed default variants and environment configurations.</span>
           </div>
         ) : (
           <div className="table-wrap">

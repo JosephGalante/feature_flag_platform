@@ -133,7 +133,7 @@ async function requireSessionCookie(): Promise<string> {
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!sessionCookie) {
-    redirect("/login");
+    redirect("/login?error=session_expired");
   }
 
   return sessionCookie;

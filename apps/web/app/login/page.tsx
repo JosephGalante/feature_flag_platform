@@ -1,5 +1,6 @@
 import {loginAction} from "@/app/actions";
 import {SESSION_COOKIE_NAME, getCurrentAdmin} from "@/lib/admin-api";
+import {readSearchParam} from "@/lib/console-hrefs";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
 import {redirect} from "next/navigation";
@@ -9,7 +10,7 @@ type LoginPageProps = {
 };
 
 function readErrorMessage(value: string | string[] | undefined): string | null {
-  const errorCode = typeof value === "string" ? value : null;
+  const errorCode = readSearchParam(value);
 
   switch (errorCode) {
     case "missing_email":
@@ -20,6 +21,8 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
       return "The API accepted the login, but no session cookie came back.";
     case "api_unavailable":
       return "The admin API is unavailable right now.";
+    case "session_expired":
+      return "Your session expired. Sign in again to continue.";
     default:
       return null;
   }
@@ -29,13 +32,22 @@ export default async function LoginPage({searchParams}: LoginPageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const admin = await getCurrentAdmin(sessionCookie);
+  let admin = null;
+  let bootstrapError: string | undefined;
+
+  try {
+    admin = sessionCookie ? await getCurrentAdmin(sessionCookie) : null;
+  } catch {
+    bootstrapError = "api_unavailable";
+  }
 
   if (admin) {
     redirect("/console");
   }
 
-  const errorMessage = readErrorMessage(params.error);
+  const errorMessage =
+    readErrorMessage(params.error) ??
+    readErrorMessage(sessionCookie ? (bootstrapError ?? "session_expired") : bootstrapError);
 
   return (
     <main className="login-shell">
@@ -68,8 +80,7 @@ export default async function LoginPage({searchParams}: LoginPageProps) {
             </button>
           </form>
           <p className="login-hint">
-            This slice is intentionally simple: seeded login first, then context switching and flag
-            visibility.
+            Use the seeded demo identity to explore the control plane without creating an account.
           </p>
         </section>
       </section>

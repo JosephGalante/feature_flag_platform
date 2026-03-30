@@ -680,6 +680,13 @@ th {
   margin-top: 0.5rem;
 }
 
+.error-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .login-hint {
   margin-top: 1rem;
   color: var(--muted);

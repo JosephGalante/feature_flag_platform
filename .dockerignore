@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+.git
+.github
+coverage
+dist
+build
+tmp
+.env
+.env.*
+pnpm-debug.log

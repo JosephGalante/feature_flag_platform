@@ -262,7 +262,7 @@ The flag detail page is the main control surface. It should expose:
 - preview evaluation
 - archive action
 
-The rule builder should be form-based and intentionally simple.
+The rule builder should be form-based and streamlined.
 
 ## Auth Scope
 

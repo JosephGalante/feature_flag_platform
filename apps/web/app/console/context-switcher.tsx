@@ -61,8 +61,7 @@ export function ContextSwitcher({
         <p className="eyebrow">Context</p>
         <h2>Work inside a real tenant shape</h2>
         <p>
-          This UI slice is wired to the live admin API. Change organization, project, and
-          environment to drive the next control surfaces.
+          Change organization, project, and environment to explore the live admin control plane.
         </p>
       </div>
 

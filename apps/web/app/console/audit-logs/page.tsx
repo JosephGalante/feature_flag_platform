@@ -86,10 +86,15 @@ export default async function AuditLogsPage({searchParams}: AuditLogsPageProps) 
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
   const admin = await getCurrentAdmin(sessionCookie);
 
-  if (!admin || !sessionCookie) {
-    redirect("/login");
+  if (!admin) {
+    redirect("/login?error=session_expired");
   }
 
   const organizations = admin.memberships;

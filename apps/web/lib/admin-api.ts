@@ -1,4 +1,5 @@
 export const SESSION_COOKIE_NAME = "ff_admin_session";
+const ADMIN_API_UNAVAILABLE_ERROR = "ADMIN_API_UNAVAILABLE";
 
 const API_BASE_URL = process.env.API_BASE_URL ?? "http://127.0.0.1:4000";
 
@@ -264,7 +265,11 @@ async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
   let data: T | null = null;
 
   if (text.length > 0) {
-    data = JSON.parse(text);
+    try {
+      data = JSON.parse(text) as T;
+    } catch {
+      data = null;
+    }
   }
 
   return {
@@ -293,13 +298,17 @@ async function apiFetch<T>(
     headers.set("cookie", `${SESSION_COOKIE_NAME}=${input.sessionCookie}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...input.init,
-    cache: "no-store",
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...input.init,
+      cache: "no-store",
+      headers,
+    });
 
-  return parseResponse<T>(response);
+    return await parseResponse<T>(response);
+  } catch {
+    throw new Error(ADMIN_API_UNAVAILABLE_ERROR);
+  }
 }
 
 export async function loginAsAdmin(email: string): Promise<{
@@ -560,6 +569,10 @@ export async function previewFlagForEnvironment(
   }
 
   throw new Error("PREVIEW_FAILED");
+}
+
+export function isAdminApiUnavailableError(error: unknown): boolean {
+  return error instanceof Error && error.message === ADMIN_API_UNAVAILABLE_ERROR;
 }
 
 export async function getApiKeysForEnvironment(

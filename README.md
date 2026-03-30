@@ -103,6 +103,8 @@ Seeded admin:
 
 For the fuller walkthrough, see [docs/local-development.md](docs/local-development.md).
 
+For deployment and verification notes, see [docs/deployment.md](docs/deployment.md).
+
 ## Public Runtime API
 
 Single flag:
@@ -172,5 +174,6 @@ const many = await client.evaluateMany(["new_checkout", "new_nav"], {
 - [docs/api.md](docs/api.md)
 - [docs/build-plan.md](docs/build-plan.md)
 - [docs/acceptance-demo.md](docs/acceptance-demo.md)
+- [docs/deployment.md](docs/deployment.md)
 - [docs/local-development.md](docs/local-development.md)
 - [docs/rationale.md](docs/rationale.md)

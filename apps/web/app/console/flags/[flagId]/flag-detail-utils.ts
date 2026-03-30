@@ -141,6 +141,8 @@ export function parsePreviewContext(value: string | null): PreviewContextRespons
 
 export function readPreviewErrorMessage(value: string): string {
   switch (value) {
+    case "ADMIN_API_UNAVAILABLE":
+      return "The admin API is unavailable right now.";
     case "invalid_preview_json":
       return "Preview context must be valid JSON.";
     case "invalid_preview_context":
