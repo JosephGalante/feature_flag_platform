@@ -1,4 +1,5 @@
 import net from "node:net";
+import tls from "node:tls";
 
 type RedisReply =
   | {kind: "bulk_string"; value: string}
@@ -11,6 +12,7 @@ type RedisConnection = {
   authArguments: ReadonlyArray<string> | null;
   host: string;
   port: number;
+  tls: boolean;
 };
 
 function findLineTerminator(buffer: Buffer, start = 0): number {
@@ -118,10 +120,10 @@ function decodeRedisUrlComponent(value: string): string {
   return decodeURIComponent(value);
 }
 
-function readRedisConnection(redisUrl: string): RedisConnection {
+export function readRedisConnection(redisUrl: string): RedisConnection {
   const url = new URL(redisUrl);
 
-  if (url.protocol !== "redis:") {
+  if (url.protocol !== "redis:" && url.protocol !== "rediss:") {
     throw new Error(`Unsupported Redis protocol: ${url.protocol}`);
   }
 
@@ -145,6 +147,7 @@ function readRedisConnection(redisUrl: string): RedisConnection {
           : ["AUTH", username, password],
     host: url.hostname,
     port: Number.parseInt(url.port || "6379", 10),
+    tls: url.protocol === "rediss:",
   };
 }
 
@@ -153,12 +156,13 @@ export async function sendRedisCommand(
   argumentsList: ReadonlyArray<string>,
   timeoutMs = 1000,
 ): Promise<RedisReply> {
-  const {authArguments, host, port} = readRedisConnection(redisUrl);
+  const {authArguments, host, port, tls: useTls} = readRedisConnection(redisUrl);
   const command = encodeRedisCommand(argumentsList);
 
   return await new Promise<RedisReply>((resolve, reject) => {
-    const socket = net.createConnection({host, port});
+    const socket = useTls ? tls.connect({host, port}) : net.createConnection({host, port});
     let responseBuffer = Buffer.alloc(0);
+    let connected = false;
     let settled = false;
     let stage: "auth" | "command" = authArguments ? "auth" : "command";
 
@@ -218,7 +222,13 @@ export async function sendRedisCommand(
     };
 
     const timeout = setTimeout(() => {
-      settleError(new Error(`Timed out connecting to Redis at ${host}:${port}`));
+      settleError(
+        new Error(
+          connected
+            ? `Timed out waiting for Redis response from ${host}:${port}`
+            : `Timed out connecting to Redis at ${host}:${port}`,
+        ),
+      );
     }, timeoutMs);
 
     socket.once("error", (error) => {
@@ -231,6 +241,7 @@ export async function sendRedisCommand(
     });
 
     socket.once("connect", () => {
+      connected = true;
       socket.write(authArguments ? encodeRedisCommand(authArguments) : command);
     });
   });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import net from "node:net";
 import test from "node:test";
-import {encodeRedisCommand, parseRedisReply, sendRedisCommand} from "./redis";
+import {encodeRedisCommand, parseRedisReply, readRedisConnection, sendRedisCommand} from "./redis";
 
 function parseRedisCommand(buffer: Buffer): {bytesConsumed: number; command: string[]} | null {
   if (buffer.length === 0 || buffer.toString("utf8", 0, 1) !== "*") {
@@ -193,4 +193,25 @@ test("authenticates before sending commands for managed Redis URLs", async () =>
   );
 
   assert.deepEqual(receivedCommands, [["AUTH", "default", "upstash-token"], ["PING"]]);
+});
+
+test("parses plain Redis URLs as non-TLS connections", () => {
+  assert.deepEqual(readRedisConnection("redis://127.0.0.1:6379"), {
+    authArguments: null,
+    host: "127.0.0.1",
+    port: 6379,
+    tls: false,
+  });
+});
+
+test("parses Upstash-style TLS Redis URLs", () => {
+  assert.deepEqual(
+    readRedisConnection("rediss://default:upstash-token@primary-guppy-88874.upstash.io:6379"),
+    {
+      authArguments: ["AUTH", "default", "upstash-token"],
+      host: "primary-guppy-88874.upstash.io",
+      port: 6379,
+      tls: true,
+    },
+  );
 });
