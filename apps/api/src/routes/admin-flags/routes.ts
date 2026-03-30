@@ -1,205 +1,32 @@
 import type {EvaluationContext} from "@feature-flag-platform/evaluation-core";
-import type {JsonValue} from "@shared/json";
 import type {FastifyInstance} from "fastify";
-import {z} from "zod";
-import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../admin/auth";
-import {createFlag, replaceFlagConfiguration, updateFlagMetadata} from "../admin/flags";
-import type {
-  ConfigurationEnvironmentInput,
-  ConfigurationRuleInput,
-  ConfigurationVariantInput,
-  FlagDetail,
-} from "../admin/flags/flags.service";
+import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../../admin/auth";
+import {createFlag, replaceFlagConfiguration, updateFlagMetadata} from "../../admin/flags";
 import {
   findAuthorizedFlagAccess,
   getFlagDetail,
   listFlagsForProject,
-} from "../admin/flags/readModel";
-import {findAuthorizedProject, listEnvironmentsForProject} from "../admin/service";
-import type {ApiConfig} from "../config";
-import type {ApiDatabase} from "../lib/database";
-import {readEnvironmentProjection} from "../lib/redis-projections";
-import {previewFlagEvaluation} from "../projections/preview-flag-evaluation";
-
-const projectParamsSchema = z.object({
-  projectId: z.string().uuid(),
-});
-
-const flagParamsSchema = z.object({
-  flagId: z.string().uuid(),
-});
-
-const flagListQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  status: z.enum(["active", "archived"]).optional(),
-});
-
-const createFlagBodySchema = z.object({
-  description: z.string().trim().min(1).nullable().optional(),
-  flagType: z.enum(["boolean", "variant"]),
-  key: z.string().trim().min(1),
-  name: z.string().trim().min(1),
-});
-
-const updateFlagBodySchema = z
-  .object({
-    description: z.string().trim().min(1).nullable().optional(),
-    name: z.string().trim().min(1).optional(),
-    status: z.enum(["active", "archived"]).optional(),
-  })
-  .refine(
-    (value) =>
-      value.name !== undefined || value.description !== undefined || value.status !== undefined,
-    {
-      message: "At least one field must be provided.",
-      path: ["body"],
-    },
-  );
-
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(jsonValueSchema),
-  ]),
-);
-
-const attributeMatchRuleSchema = z.object({
-  attributeKey: z.string().trim().min(1),
-  comparisonValue: z.union([z.string(), z.array(z.string().trim().min(1)).min(1)]),
-  operator: z.enum(["equals", "in"]),
-  ruleType: z.literal("attribute_match"),
-  sortOrder: z.number().int().positive(),
-  variantKey: z.string().trim().min(1),
-});
-
-const percentageRolloutRuleSchema = z.object({
-  rolloutPercentage: z.number().int().min(0).max(100),
-  ruleType: z.literal("percentage_rollout"),
-  sortOrder: z.number().int().positive(),
-  variantKey: z.string().trim().min(1),
-});
-
-const configurationBodySchema = z.object({
-  environments: z.array(
-    z.object({
-      defaultVariantKey: z.string().trim().min(1),
-      enabled: z.boolean(),
-      environmentId: z.string().uuid(),
-      rules: z.array(z.union([attributeMatchRuleSchema, percentageRolloutRuleSchema])),
-    }),
-  ),
-  variants: z.array(
-    z.object({
-      description: z.string().trim().min(1).nullable().optional(),
-      key: z.string().trim().min(1),
-      value: jsonValueSchema,
-    }),
-  ),
-});
-
-const previewBodySchema = z.object({
-  context: z.record(z.string()).default({}),
-  environmentId: z.string().uuid(),
-});
+} from "../../admin/flags/readModel";
+import {findAuthorizedProject, listEnvironmentsForProject} from "../../admin/service";
+import type {ApiConfig} from "../../config";
+import type {ApiDatabase} from "../../lib/database";
+import {readEnvironmentProjection} from "../../lib/redis-projections";
+import {previewFlagEvaluation} from "../../projections/preview-flag-evaluation";
+import {toConfigurationInputs, validateConfigurationPayload} from "./payloads";
+import {
+  configurationBodySchema,
+  createFlagBodySchema,
+  flagListQuerySchema,
+  flagParamsSchema,
+  previewBodySchema,
+  projectParamsSchema,
+  updateFlagBodySchema,
+} from "./schemas";
 
 function isKnownServiceError(
   error: unknown,
 ): error is Error & {message: "FLAG_KEY_ALREADY_EXISTS"} {
   return error instanceof Error && error.message === "FLAG_KEY_ALREADY_EXISTS";
-}
-
-function validateConfigurationPayload(input: {
-  currentDetail: FlagDetail;
-  environments: ConfigurationEnvironmentInput[];
-  variants: ConfigurationVariantInput[];
-}): string[] {
-  const issues: string[] = [];
-  const variantKeys = new Set<string>();
-
-  if (input.variants.length === 0) {
-    issues.push("variants must contain at least one variant.");
-  }
-
-  for (const variant of input.variants) {
-    if (variantKeys.has(variant.key)) {
-      issues.push(`variants contains duplicate key '${variant.key}'.`);
-      continue;
-    }
-
-    variantKeys.add(variant.key);
-  }
-
-  const expectedEnvironmentIds = new Set<string>(
-    input.currentDetail.environments.map((environment) => environment.environment.id),
-  );
-  const seenEnvironmentIds = new Set<string>();
-
-  if (input.environments.length !== expectedEnvironmentIds.size) {
-    issues.push("environments must include every existing project environment exactly once.");
-  }
-
-  for (const environment of input.environments) {
-    if (!expectedEnvironmentIds.has(environment.environmentId)) {
-      issues.push(`environment '${environment.environmentId}' does not belong to this flag.`);
-    }
-
-    if (seenEnvironmentIds.has(environment.environmentId)) {
-      issues.push(`environments contains duplicate environmentId '${environment.environmentId}'.`);
-      continue;
-    }
-
-    seenEnvironmentIds.add(environment.environmentId);
-
-    if (!variantKeys.has(environment.defaultVariantKey)) {
-      issues.push(
-        `environment '${environment.environmentId}' references missing defaultVariantKey '${environment.defaultVariantKey}'.`,
-      );
-    }
-
-    const seenSortOrders = new Set<number>();
-
-    for (const rule of environment.rules) {
-      if (seenSortOrders.has(rule.sortOrder)) {
-        issues.push(
-          `environment '${environment.environmentId}' contains duplicate sortOrder '${rule.sortOrder}'.`,
-        );
-      } else {
-        seenSortOrders.add(rule.sortOrder);
-      }
-
-      if (!variantKeys.has(rule.variantKey)) {
-        issues.push(
-          `environment '${environment.environmentId}' rule '${rule.sortOrder}' references missing variantKey '${rule.variantKey}'.`,
-        );
-      }
-
-      if (rule.ruleType === "attribute_match") {
-        if (rule.operator === "equals" && typeof rule.comparisonValue !== "string") {
-          issues.push(
-            `environment '${environment.environmentId}' rule '${rule.sortOrder}' must use a string comparisonValue for equals.`,
-          );
-        }
-
-        if (rule.operator === "in" && !Array.isArray(rule.comparisonValue)) {
-          issues.push(
-            `environment '${environment.environmentId}' rule '${rule.sortOrder}' must use an array comparisonValue for in.`,
-          );
-        }
-      }
-    }
-  }
-
-  for (const environmentId of expectedEnvironmentIds) {
-    if (!seenEnvironmentIds.has(environmentId)) {
-      issues.push(`environments is missing required environment '${environmentId}'.`);
-    }
-  }
-
-  return issues;
 }
 
 export async function registerAdminFlagRoutes(
@@ -557,37 +384,7 @@ export async function registerAdminFlagRoutes(
       });
     }
 
-    const variants: ConfigurationVariantInput[] = parsedBody.data.variants.map((variant) => ({
-      description: variant.description ?? null,
-      key: variant.key,
-      value: variant.value,
-    }));
-    const environments: ConfigurationEnvironmentInput[] = parsedBody.data.environments.map(
-      (environment) => ({
-        defaultVariantKey: environment.defaultVariantKey,
-        enabled: environment.enabled,
-        environmentId: environment.environmentId,
-        rules: environment.rules.map(
-          (rule): ConfigurationRuleInput =>
-            rule.ruleType === "attribute_match"
-              ? {
-                  attributeKey: rule.attributeKey,
-                  comparisonValue: rule.comparisonValue,
-                  operator: rule.operator,
-                  ruleType: "attribute_match",
-                  sortOrder: rule.sortOrder,
-                  variantKey: rule.variantKey,
-                }
-              : {
-                  rolloutPercentage: rule.rolloutPercentage,
-                  ruleType: "percentage_rollout",
-                  sortOrder: rule.sortOrder,
-                  variantKey: rule.variantKey,
-                },
-        ),
-      }),
-    );
-
+    const {environments, variants} = toConfigurationInputs(parsedBody.data);
     const validationIssues = validateConfigurationPayload({
       currentDetail,
       environments,

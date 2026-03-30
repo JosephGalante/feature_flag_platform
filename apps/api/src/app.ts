@@ -4,7 +4,7 @@ import {createApiDatabase} from "./lib/database";
 import {registerAdminRoutes} from "./routes/admin";
 import {registerAdminApiKeyRoutes} from "./routes/admin-api-keys";
 import {registerAdminAuditLogRoutes} from "./routes/admin-audit-logs";
-import {registerAdminFlagRoutes} from "./routes/admin-flags";
+import {registerAdminFlagRoutes} from "./routes/admin-flags/routes";
 import {registerEvaluationRoutes} from "./routes/evaluation";
 import {registerHealthRoutes} from "./routes/health";
 import {registerInternalProjectionRoutes} from "./routes/internal-projections";
