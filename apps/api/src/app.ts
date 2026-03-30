@@ -5,6 +5,7 @@ import {registerAdminRoutes} from "./routes/admin";
 import {registerAdminApiKeyRoutes} from "./routes/admin-api-keys";
 import {registerAdminAuditLogRoutes} from "./routes/admin-audit-logs";
 import {registerAdminFlagRoutes} from "./routes/admin-flags";
+import {registerEvaluationRoutes} from "./routes/evaluation";
 import {registerHealthRoutes} from "./routes/health";
 import {registerInternalProjectionRoutes} from "./routes/internal-projections";
 
@@ -21,6 +22,7 @@ export async function buildApp(config: ApiConfig = readApiConfig()): Promise<Fas
 
   await registerHealthRoutes(app, db, config);
   await registerInternalProjectionRoutes(app, db, config);
+  await registerEvaluationRoutes(app, db, config);
   await registerAdminRoutes(app, db, config);
   await registerAdminFlagRoutes(app, db, config);
   await registerAdminApiKeyRoutes(app, db, config);
