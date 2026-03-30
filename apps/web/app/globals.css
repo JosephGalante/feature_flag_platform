@@ -172,6 +172,10 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.summary-grid {
+  margin-top: 1rem;
+}
+
 .context-field,
 .login-field {
   display: grid;

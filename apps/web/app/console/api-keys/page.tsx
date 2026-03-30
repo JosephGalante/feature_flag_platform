@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin-api";
 import {API_KEY_FLASH_COOKIE_NAME, decodeApiKeyFlash} from "@/lib/api-key-flash";
 import {buildConsoleHref, readSearchParam} from "@/lib/console-hrefs";
+import {buildAuthEntryHref, isReadOnlyDemoEnabled} from "@/lib/demo-mode";
 import type {SearchParams} from "@/lib/types";
 import {formatTimestamp} from "@/lib/utils";
 import {cookies} from "next/headers";
@@ -38,6 +39,8 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
       return "The API rejected the API key creation request.";
     case "api_key_revoke_failed":
       return "The API rejected the revoke request.";
+    case "read_only_demo":
+      return "Read-only demo mode is enabled. API key changes are disabled.";
     default:
       return null;
   }
@@ -48,15 +51,16 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
   const cookieStore = await cookies();
   const flash = decodeApiKeyFlash(cookieStore.get(API_KEY_FLASH_COOKIE_NAME)?.value);
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const isReadOnlyDemo = isReadOnlyDemoEnabled();
 
   if (!sessionCookie) {
-    redirect("/login");
+    redirect(buildAuthEntryHref());
   }
 
   const admin = await getCurrentAdmin(sessionCookie);
 
   if (!admin) {
-    redirect("/login?error=session_expired");
+    redirect(buildAuthEntryHref());
   }
 
   const organizations = admin.memberships;
@@ -146,6 +150,12 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
       {errorMessage ? (
         <p className="detail-feedback detail-feedback-error">{errorMessage}</p>
       ) : null}
+      {isReadOnlyDemo ? (
+        <p className="detail-feedback detail-feedback-info">
+          Read-only demo mode is enabled. Existing keys remain visible, but issuing or revoking keys
+          is disabled.
+        </p>
+      ) : null}
 
       <ContextSwitcher
         basePath="/console/api-keys"
@@ -193,7 +203,7 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
             </div>
           </div>
 
-          {selectedEnvironment ? (
+          {selectedEnvironment && !isReadOnlyDemo ? (
             <form action={createApiKeyAction} className="create-form">
               <input
                 name="organizationId"
@@ -214,8 +224,16 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
             </form>
           ) : (
             <div className="empty-state">
-              <p>Select an environment before creating an API key.</p>
-              <span>This page always manages keys for one environment at a time.</span>
+              <p>
+                {selectedEnvironment
+                  ? "Read-only demo mode is enabled."
+                  : "Select an environment before creating an API key."}
+              </p>
+              <span>
+                {selectedEnvironment
+                  ? "Key issuance is disabled in the public demo to preserve a stable environment."
+                  : "This page always manages keys for one environment at a time."}
+              </span>
             </div>
           )}
         </article>
@@ -273,7 +291,7 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
                       <td>{apiKey.lastUsedAt ? formatTimestamp(apiKey.lastUsedAt) : "Never"}</td>
                       <td>{formatTimestamp(apiKey.createdAt)}</td>
                       <td>
-                        {apiKey.status === "active" ? (
+                        {apiKey.status === "active" && !isReadOnlyDemo ? (
                           <form action={revokeApiKeyAction}>
                             <input name="apiKeyId" type="hidden" value={apiKey.id} />
                             <input
@@ -296,7 +314,9 @@ export default async function ApiKeysPage({searchParams}: ApiKeysPageProps) {
                             </button>
                           </form>
                         ) : (
-                          <span className="flag-description">Revoked</span>
+                          <span className="flag-description">
+                            {apiKey.status === "active" ? "Read-only demo" : "Revoked"}
+                          </span>
                         )}
                       </td>
                     </tr>

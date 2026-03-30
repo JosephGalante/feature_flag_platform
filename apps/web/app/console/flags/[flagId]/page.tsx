@@ -12,6 +12,7 @@ import {
   previewFlagForEnvironment,
 } from "@/lib/admin-api";
 import {buildConsoleHref, buildFlagDetailHref, readSearchParam} from "@/lib/console-hrefs";
+import {buildAuthEntryHref, isReadOnlyDemoEnabled} from "@/lib/demo-mode";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
 import {notFound, redirect} from "next/navigation";
@@ -32,15 +33,16 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
   const resolvedQuery = query ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const isReadOnlyDemo = isReadOnlyDemoEnabled();
 
   if (!sessionCookie) {
-    redirect("/login");
+    redirect(buildAuthEntryHref());
   }
 
   const admin = await getCurrentAdmin(sessionCookie);
 
   if (!admin) {
-    redirect("/login?error=session_expired");
+    redirect(buildAuthEntryHref());
   }
 
   const detail = await getFlagDetail(flagId, sessionCookie);
@@ -113,16 +115,26 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
         backHref={backHref}
         errorMessage={errorMessage}
         name={detail.flag.name}
-        noticeMessage={noticeMessage}
+        noticeMessage={
+          noticeMessage ??
+          (isReadOnlyDemo
+            ? "Read-only demo mode is enabled. Preview remains available, but flag changes are disabled."
+            : null)
+        }
       />
       <FlagSummaryCards flag={detail.flag} />
-      <FlagMetadataPanel flag={detail.flag} routeContext={routeContext} />
+      <FlagMetadataPanel
+        flag={detail.flag}
+        isReadOnlyDemo={isReadOnlyDemo}
+        routeContext={routeContext}
+      />
 
       <section className="detail-grid">
         <FlagVariantsPanel variants={detail.variants} />
         <FlagEnvironmentsPanel
           environments={detail.environments}
           flagId={detail.flag.id}
+          isReadOnlyDemo={isReadOnlyDemo}
           routeContext={{
             organizationId,
             projectId,

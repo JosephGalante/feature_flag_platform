@@ -13,6 +13,7 @@ import {
   buildFlagDetailHref,
   readSearchParam,
 } from "@/lib/console-hrefs";
+import {buildAuthEntryHref, isReadOnlyDemoEnabled} from "@/lib/demo-mode";
 import type {SearchParams} from "@/lib/types";
 import {formatTimestamp} from "@/lib/utils";
 import {cookies} from "next/headers";
@@ -86,15 +87,16 @@ export default async function AuditLogsPage({searchParams}: AuditLogsPageProps) 
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const isReadOnlyDemo = isReadOnlyDemoEnabled();
 
   if (!sessionCookie) {
-    redirect("/login");
+    redirect(buildAuthEntryHref());
   }
 
   const admin = await getCurrentAdmin(sessionCookie);
 
   if (!admin) {
-    redirect("/login?error=session_expired");
+    redirect(buildAuthEntryHref());
   }
 
   const organizations = admin.memberships;
@@ -200,6 +202,12 @@ export default async function AuditLogsPage({searchParams}: AuditLogsPageProps) 
         selectedProjectId={selectedProject?.id ?? null}
         selectedEnvironmentId={selectedEnvironment?.id ?? null}
       />
+
+      {isReadOnlyDemo ? (
+        <p className="detail-feedback detail-feedback-info">
+          Read-only demo mode is enabled. Audit history remains available for review.
+        </p>
+      ) : null}
 
       <section className="summary-grid">
         <article className="panel stat-card">

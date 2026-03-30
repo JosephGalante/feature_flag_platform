@@ -5,6 +5,7 @@ import type {ConsoleContextQuery} from "@/lib/console-hrefs";
 
 interface FlagMetadataPanelProps {
   flag: FlagDetail["flag"];
+  isReadOnlyDemo: boolean;
   routeContext: ConsoleContextQuery;
 }
 
@@ -29,33 +30,40 @@ export default function FlagMetadataPanel(input: FlagMetadataPanelProps) {
             </div>
           </div>
 
-          <form action={updateFlagMetadataAction} className="metadata-form">
-            <input name="flagId" type="hidden" value={input.flag.id} />
-            <ConsoleContextHiddenInputs {...input.routeContext} />
+          {input.isReadOnlyDemo ? (
+            <p className="detail-inline-meta">
+              Metadata editing is disabled in the read-only demo. The current flag state stays
+              available for review.
+            </p>
+          ) : (
+            <form action={updateFlagMetadataAction} className="metadata-form">
+              <input name="flagId" type="hidden" value={input.flag.id} />
+              <ConsoleContextHiddenInputs {...input.routeContext} />
 
-            <div className="metadata-form-grid">
-              <label className="context-field">
-                <span>Name</span>
-                <input defaultValue={input.flag.name} name="name" type="text" />
-              </label>
+              <div className="metadata-form-grid">
+                <label className="context-field">
+                  <span>Name</span>
+                  <input defaultValue={input.flag.name} name="name" type="text" />
+                </label>
 
-              <label className="context-field">
-                <span>Description</span>
-                <input
-                  defaultValue={input.flag.description ?? ""}
-                  name="description"
-                  placeholder="No description yet."
-                  type="text"
-                />
-              </label>
-            </div>
+                <label className="context-field">
+                  <span>Description</span>
+                  <input
+                    defaultValue={input.flag.description ?? ""}
+                    name="description"
+                    placeholder="No description yet."
+                    type="text"
+                  />
+                </label>
+              </div>
 
-            <div className="metadata-form-actions">
-              <button className="primary-button create-button" type="submit">
-                Save metadata
-              </button>
-            </div>
-          </form>
+              <div className="metadata-form-actions">
+                <button className="primary-button create-button" type="submit">
+                  Save metadata
+                </button>
+              </div>
+            </form>
+          )}
         </section>
 
         <section className="detail-block">
@@ -77,6 +85,8 @@ export default function FlagMetadataPanel(input: FlagMetadataPanelProps) {
 
             {input.flag.status === "archived" ? (
               <span className="table-link-button is-disabled">Already archived</span>
+            ) : input.isReadOnlyDemo ? (
+              <span className="table-link-button is-disabled">Read-only demo</span>
             ) : (
               <form action={archiveFlagAction}>
                 <input name="flagId" type="hidden" value={input.flag.id} />

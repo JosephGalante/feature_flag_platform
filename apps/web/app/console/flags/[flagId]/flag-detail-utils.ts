@@ -108,6 +108,8 @@ export function readFlagDetailErrorMessage(value: string | string[] | undefined)
       return "The API rejected the archive request.";
     case "save_failed":
       return "The API rejected the environment update.";
+    case "read_only_demo":
+      return "Read-only demo mode is enabled. Flag edits and environment changes are disabled.";
     default:
       return null;
   }

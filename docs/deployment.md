@@ -37,6 +37,14 @@ docker build -f apps/worker/Dockerfile -t feature-flag-platform-worker .
 - `apps/web` needs `API_BASE_URL` pointed at the deployed API.
 - `apps/worker` needs Postgres and Redis access so it can process projection refresh events.
 
+For a public portfolio deployment, the web app can also use:
+
+- `READ_ONLY_DEMO_MODE=true`
+- `DEMO_ADMIN_EMAIL=owner@acme.test`
+
+That mode bootstraps a seeded admin session through the web app and keeps write actions disabled in
+the UI so reviewers can explore the product without creating an account.
+
 ## Verification
 
 Run the full repository verification locally with:

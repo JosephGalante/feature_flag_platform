@@ -17,6 +17,7 @@ import {
 } from "../lib/admin-api";
 import {API_KEY_FLASH_COOKIE_NAME, encodeApiKeyFlash} from "../lib/api-key-flash";
 import {buildApiKeysHref, buildConsoleHref, buildFlagDetailHref} from "../lib/console-hrefs";
+import {buildAuthEntryHref, isReadOnlyDemoEnabled} from "../lib/demo-mode";
 
 function readEmail(formData: FormData): string {
   const rawValue = formData.get("email");
@@ -133,10 +134,16 @@ async function requireSessionCookie(): Promise<string> {
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!sessionCookie) {
-    redirect("/login?error=session_expired");
+    redirect(buildAuthEntryHref());
   }
 
   return sessionCookie;
+}
+
+function redirectIfReadOnlyDemo(href: string): void {
+  if (isReadOnlyDemoEnabled()) {
+    redirect(href);
+  }
 }
 
 function toConfigurationRuleInput(rule: AdminFlagRule): ReplacementRuleInput {
@@ -358,6 +365,10 @@ function buildReplacementConfigurationPayload(input: {
 }
 
 export async function loginAction(formData: FormData): Promise<void> {
+  if (isReadOnlyDemoEnabled()) {
+    redirect("/demo");
+  }
+
   const email = readEmail(formData);
 
   if (email.length === 0) {
@@ -398,7 +409,7 @@ export async function loginAction(formData: FormData): Promise<void> {
 export async function logoutAction(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
-  redirect("/login");
+  redirect(isReadOnlyDemoEnabled() ? "/demo" : "/login");
 }
 
 export async function createFlagAction(formData: FormData): Promise<void> {
@@ -420,6 +431,15 @@ export async function createFlagAction(formData: FormData): Promise<void> {
       }),
     );
   }
+
+  redirectIfReadOnlyDemo(
+    buildConsoleHref({
+      environmentId,
+      error: "read_only_demo",
+      organizationId,
+      projectId,
+    }),
+  );
 
   const sessionCookie = await requireSessionCookie();
 
@@ -471,6 +491,15 @@ export async function createApiKeyAction(formData: FormData): Promise<void> {
       }),
     );
   }
+
+  redirectIfReadOnlyDemo(
+    buildApiKeysHref({
+      environmentId,
+      error: "read_only_demo",
+      organizationId,
+      projectId,
+    }),
+  );
 
   const sessionCookie = await requireSessionCookie();
   const cookieStore = await cookies();
@@ -525,6 +554,15 @@ export async function revokeApiKeyAction(formData: FormData): Promise<void> {
     );
   }
 
+  redirectIfReadOnlyDemo(
+    buildApiKeysHref({
+      environmentId,
+      error: "read_only_demo",
+      organizationId,
+      projectId,
+    }),
+  );
+
   const sessionCookie = await requireSessionCookie();
 
   await revokeApiKeyById(apiKeyId, sessionCookie).catch(() => {
@@ -564,6 +602,16 @@ export async function updateFlagMetadataAction(formData: FormData): Promise<void
       }),
     );
   }
+
+  redirectIfReadOnlyDemo(
+    buildFlagDetailHref({
+      environmentId,
+      error: "read_only_demo",
+      flagId,
+      organizationId,
+      projectId,
+    }),
+  );
 
   const sessionCookie = await requireSessionCookie();
 
@@ -610,6 +658,16 @@ export async function archiveFlagAction(formData: FormData): Promise<void> {
       }),
     );
   }
+
+  redirectIfReadOnlyDemo(
+    buildFlagDetailHref({
+      environmentId,
+      error: "read_only_demo",
+      flagId,
+      organizationId,
+      projectId,
+    }),
+  );
 
   const sessionCookie = await requireSessionCookie();
 
@@ -670,6 +728,16 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
       }),
     );
   }
+
+  redirectIfReadOnlyDemo(
+    buildFlagDetailHref({
+      environmentId,
+      error: "read_only_demo",
+      flagId,
+      organizationId,
+      projectId,
+    }),
+  );
 
   if ("error" in rolloutInput) {
     redirect(

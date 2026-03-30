@@ -1,6 +1,7 @@
 import {loginAction} from "@/app/actions";
 import {SESSION_COOKIE_NAME, getCurrentAdmin} from "@/lib/admin-api";
 import {readSearchParam} from "@/lib/console-hrefs";
+import {buildAuthEntryHref, isReadOnlyDemoEnabled} from "@/lib/demo-mode";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
 import {redirect} from "next/navigation";
@@ -32,6 +33,7 @@ export default async function LoginPage({searchParams}: LoginPageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const isReadOnlyDemo = isReadOnlyDemoEnabled();
   let admin = null;
   let bootstrapError: string | undefined;
 
@@ -43,6 +45,10 @@ export default async function LoginPage({searchParams}: LoginPageProps) {
 
   if (admin) {
     redirect("/console");
+  }
+
+  if (isReadOnlyDemo && readSearchParam(params.error) === null && bootstrapError === undefined) {
+    redirect("/demo");
   }
 
   const errorMessage =
@@ -62,25 +68,33 @@ export default async function LoginPage({searchParams}: LoginPageProps) {
 
         <section className="login-panel">
           <p className="eyebrow">Admin Login</p>
-          <h2>Use the seeded owner account</h2>
+          <h2>{isReadOnlyDemo ? "Enter the read-only demo" : "Use the seeded owner account"}</h2>
           {errorMessage ? <p className="login-error">{errorMessage}</p> : null}
-          <form action={loginAction}>
-            <label className="login-field">
-              <span>Email</span>
-              <input
-                autoComplete="email"
-                defaultValue="owner@acme.test"
-                name="email"
-                placeholder="owner@acme.test"
-                type="email"
-              />
-            </label>
-            <button className="primary-button" type="submit">
-              Enter Console
-            </button>
-          </form>
+          {isReadOnlyDemo ? (
+            <a className="primary-button detail-back-link" href={buildAuthEntryHref()}>
+              Open demo console
+            </a>
+          ) : (
+            <form action={loginAction}>
+              <label className="login-field">
+                <span>Email</span>
+                <input
+                  autoComplete="email"
+                  defaultValue="owner@acme.test"
+                  name="email"
+                  placeholder="owner@acme.test"
+                  type="email"
+                />
+              </label>
+              <button className="primary-button" type="submit">
+                Enter Console
+              </button>
+            </form>
+          )}
           <p className="login-hint">
-            Use the seeded demo identity to explore the control plane without creating an account.
+            {isReadOnlyDemo
+              ? "This deployment opens into a seeded, read-only demo workspace so reviewers can explore it without creating an account."
+              : "Use the seeded demo identity to explore the control plane without creating an account."}
           </p>
         </section>
       </section>

@@ -5,6 +5,7 @@ import type {ConsoleContextQuery} from "@/lib/console-hrefs";
 interface FlagEnvironmentsPanelProps {
   environments: FlagDetail["environments"];
   flagId: string;
+  isReadOnlyDemo: boolean;
   routeContext: Omit<ConsoleContextQuery, "environmentId">;
   selectedEnvironmentId: string | null;
   variants: FlagVariantDetail[];
@@ -25,6 +26,7 @@ export default function FlagEnvironmentsPanel(input: FlagEnvironmentsPanelProps)
           <EnvironmentCard
             environmentDetail={environmentDetail}
             flagId={input.flagId}
+            isReadOnlyDemo={input.isReadOnlyDemo}
             key={environmentDetail.config.id}
             routeContext={input.routeContext}
             selectedEnvironmentId={input.selectedEnvironmentId}

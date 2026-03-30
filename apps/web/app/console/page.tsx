@@ -13,6 +13,7 @@ import {
   buildFlagDetailHref,
   readSearchParam,
 } from "@/lib/console-hrefs";
+import {buildAuthEntryHref, isReadOnlyDemoEnabled} from "@/lib/demo-mode";
 import type {SearchParams} from "@/lib/types";
 import {formatTimestamp} from "@/lib/utils";
 import {cookies} from "next/headers";
@@ -31,6 +32,8 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
       return "A flag with that key already exists in this project.";
     case "flag_create_failed":
       return "The API rejected the flag creation request.";
+    case "read_only_demo":
+      return "Read-only demo mode is enabled. Flag creation is disabled.";
     default:
       return null;
   }
@@ -40,15 +43,16 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const isReadOnlyDemo = isReadOnlyDemoEnabled();
 
   if (!sessionCookie) {
-    redirect("/login");
+    redirect(buildAuthEntryHref());
   }
 
   const admin = await getCurrentAdmin(sessionCookie);
 
   if (!admin) {
-    redirect("/login?error=session_expired");
+    redirect(buildAuthEntryHref());
   }
 
   const organizations = admin.memberships;
@@ -142,6 +146,12 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
       {errorMessage ? (
         <p className="detail-feedback detail-feedback-error">{errorMessage}</p>
       ) : null}
+      {isReadOnlyDemo ? (
+        <p className="detail-feedback detail-feedback-info">
+          Read-only demo mode is enabled. You can explore the control plane, but write actions are
+          disabled.
+        </p>
+      ) : null}
 
       <section className="panel detail-panel">
         <div className="table-header">
@@ -154,7 +164,7 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
           </p>
         </div>
 
-        {selectedProject ? (
+        {selectedProject && !isReadOnlyDemo ? (
           <form action={createFlagAction} className="flag-create-form">
             <input
               name="organizationId"
@@ -201,9 +211,15 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
           </form>
         ) : (
           <div className="empty-state">
-            <p>Select a project before creating a flag.</p>
+            <p>
+              {selectedProject
+                ? "Read-only demo mode is enabled."
+                : "Select a project before creating a flag."}
+            </p>
             <span>
-              This form creates project-scoped flags and seeds every environment automatically.
+              {selectedProject
+                ? "Flag creation is disabled in the public demo so visitors can explore a stable dataset."
+                : "This form creates project-scoped flags and seeds every environment automatically."}
             </span>
           </div>
         )}

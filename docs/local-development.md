@@ -67,6 +67,16 @@ export API_BASE_URL=http://127.0.0.1:${API_PORT}
 pnpm --filter @feature-flag-platform/web exec next dev --hostname 127.0.0.1 --port ${WEB_PORT}
 ```
 
+Optional public demo mode:
+
+```bash
+export READ_ONLY_DEMO_MODE=true
+export DEMO_ADMIN_EMAIL=owner@acme.test
+```
+
+With read-only demo mode enabled, visiting `/` will auto-bootstrap the seeded admin session and open
+the console without requiring manual sign-in. Write actions stay disabled in the web UI.
+
 Open:
 
 - `http://127.0.0.1:3000/login`

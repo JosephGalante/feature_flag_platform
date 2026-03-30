@@ -101,6 +101,12 @@ Seeded admin:
 
 - `owner@acme.test`
 
+Optional read-only demo mode:
+
+- set `READ_ONLY_DEMO_MODE=true`
+- keep `DEMO_ADMIN_EMAIL=owner@acme.test`
+- open `http://127.0.0.1:3000/` and the web app will bootstrap a seeded demo session automatically
+
 For the fuller walkthrough, see [docs/local-development.md](docs/local-development.md).
 
 For deployment and verification notes, see [docs/deployment.md](docs/deployment.md).
