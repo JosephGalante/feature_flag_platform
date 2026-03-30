@@ -3,7 +3,7 @@ import type {
   ConfigurationRuleInput,
   ConfigurationVariantInput,
   FlagDetail,
-} from "../../admin/flags/flags.service";
+} from "@api/admin/flags/flags.service";
 import type {ConfigurationBody} from "./schemas";
 
 export function toConfigurationInputs(body: ConfigurationBody): {

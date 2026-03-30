@@ -20,12 +20,14 @@
     "erasableSyntaxOnly": true,
     "paths": {
       "@/*": ["./*"],
+      "@api/*": ["./apps/api/src/*"],
       "@config": ["./packages/config/src/index.ts"],
       "@config/*": ["./packages/config/src/*"],
       "@feature-flag-platform/evaluation-core": ["./packages/evaluation-core/src/index.ts"],
       "@feature-flag-platform/evaluation-core/*": ["./packages/evaluation-core/src/*"],
       "@shared": ["./packages/shared/src/index.ts"],
-      "@shared/*": ["./packages/shared/src/*"]
+      "@shared/*": ["./packages/shared/src/*"],
+      "@worker/*": ["./apps/worker/src/*"]
     }
   }
 }

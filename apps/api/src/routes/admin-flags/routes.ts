@@ -1,17 +1,17 @@
-import type {EvaluationContext} from "@feature-flag-platform/evaluation-core";
-import type {FastifyInstance} from "fastify";
-import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "../../admin/auth";
-import {createFlag, replaceFlagConfiguration, updateFlagMetadata} from "../../admin/flags";
+import {requireAuthenticatedAdmin, requireOrganizationWriteAccess} from "@api/admin/auth";
+import {createFlag, replaceFlagConfiguration, updateFlagMetadata} from "@api/admin/flags";
 import {
   findAuthorizedFlagAccess,
   getFlagDetail,
   listFlagsForProject,
-} from "../../admin/flags/readModel";
-import {findAuthorizedProject, listEnvironmentsForProject} from "../../admin/service";
-import type {ApiConfig} from "../../config";
-import type {ApiDatabase} from "../../lib/database";
-import {readEnvironmentProjection} from "../../lib/redis-projections";
-import {previewFlagEvaluation} from "../../projections/preview-flag-evaluation";
+} from "@api/admin/flags/readModel";
+import {findAuthorizedProject, listEnvironmentsForProject} from "@api/admin/service";
+import type {ApiConfig} from "@api/config";
+import type {ApiDatabase} from "@api/lib/database";
+import {readEnvironmentProjection} from "@api/lib/redis-projections";
+import {previewFlagEvaluation} from "@api/projections/preview-flag-evaluation";
+import type {EvaluationContext} from "@feature-flag-platform/evaluation-core";
+import type {FastifyInstance} from "fastify";
 import {toConfigurationInputs, validateConfigurationPayload} from "./payloads";
 import {
   configurationBodySchema,
