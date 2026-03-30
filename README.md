@@ -1,34 +1,63 @@
 # Feature Flag Platform
 
-Multi-tenant feature flag platform with a Postgres-backed control plane, Redis-backed data plane, transactional outbox propagation, reconciliation, and a thin JavaScript SDK.
+A multi-tenant feature flag system built to demonstrate backend platform thinking, not just CRUD.
 
-## Current Status
+This project separates a Postgres-backed control plane from a Redis-backed evaluation plane, supports environment-scoped API keys, keeps a full audit trail, and uses asynchronous projection rebuilds so evaluation stays fast while source-of-truth data remains relational and recoverable.
 
-This repo is implemented, not just planned.
+## Why This Project Is Interesting
 
-Current MVP surfaces:
+This repo is meant to show the kinds of tradeoffs senior engineers and hiring managers care about:
 
-- admin API for organizations, projects, environments, flags, audit logs, and API keys
-- Next.js admin UI for login, context switching, flag management, preview evaluation, API keys, and audit history
-- Redis-backed public evaluation API for one or many flags
-- worker-driven outbox processing and reconciliation
-- thin JS SDK with `evaluate()` and `evaluateMany()`
+- clear separation between source-of-truth writes and low-latency reads
+- deterministic evaluation logic isolated in a pure package
+- transactional write behavior with auditability
+- rebuildable Redis projections instead of Redis as source of truth
+- a realistic deployment tradeoff: cheap hosted async processing via QStash callbacks instead of paying for an always-on worker
 
-## Architecture
+## What It Includes
+
+- Fastify admin API for organizations, projects, environments, flags, API keys, sessions, and audit history
+- Next.js admin UI for context switching, flag management, preview evaluation, API keys, and audit inspection
+- public evaluation API for single-flag and batch evaluation
+- pure evaluation engine in `packages/evaluation-core`
+- thin JavaScript SDK in `packages/sdk-js`
+- optional worker implementation plus a cheaper hosted QStash-based async path
+
+## Architecture At A Glance
 
 The system is intentionally split into two planes:
 
-- Control plane: admins write source-of-truth configuration to Postgres.
-- Data plane: applications evaluate flags from compiled environment projections stored in Redis.
+- Control plane: admins write configuration to Postgres
+- Data plane: applications evaluate flags from compiled per-environment projections stored in Redis
 
-Important implementation rules:
+Core rules:
 
-- Postgres is authoritative.
-- Redis is rebuildable and not authoritative.
-- evaluation logic lives in `packages/evaluation-core`
-- evaluation-affecting writes append audit rows and outbox rows transactionally
-- the worker rebuilds full environment projections
-- reconciliation repairs missing or stale Redis state
+- Postgres is authoritative
+- Redis is derived and rebuildable
+- evaluation logic is pure and isolated from HTTP, DB, and Redis concerns
+- evaluation-affecting writes append audit information transactionally
+- async rebuilds update Redis projections after writes
+
+### Request / Data Flow
+
+1. Admin writes flag configuration through the control-plane API.
+2. Postgres remains the source of truth for flags, environments, API keys, and audit logs.
+3. The API publishes an async projection refresh job.
+4. QStash calls back into the API.
+5. The API rebuilds the affected environment projection and writes it to Redis.
+6. Evaluation requests read the compiled projection from Redis and execute pure rule logic.
+
+## Current Deployment Shape
+
+For the cheapest useful hosted deployment:
+
+- web: Vercel
+- API: Render
+- database: Supabase Postgres
+- cache / projected read model: Upstash Redis
+- async job transport: Upstash QStash
+
+This preserves the asynchronous architecture story without requiring a paid always-on background worker.
 
 ## Repo Layout
 
@@ -51,9 +80,9 @@ infra/
 docs/
 ```
 
-## Local Run
+## Local Development
 
-Short version:
+Quick start:
 
 ```bash
 pnpm install
@@ -83,7 +112,7 @@ export API_BASE_URL=http://127.0.0.1:${API_PORT}
 pnpm --filter @feature-flag-platform/web exec next dev --hostname 127.0.0.1 --port ${WEB_PORT}
 ```
 
-Start the worker in another terminal:
+Optional local worker:
 
 ```bash
 set -a
@@ -105,13 +134,11 @@ Optional read-only demo mode:
 
 - set `READ_ONLY_DEMO_MODE=true`
 - keep `DEMO_ADMIN_EMAIL=owner@acme.test`
-- open `http://127.0.0.1:3000/` and the web app will bootstrap a seeded demo session automatically
+- open `http://127.0.0.1:3000/`
 
-For the fuller walkthrough, see [docs/local-development.md](docs/local-development.md).
+See [docs/local-development.md](docs/local-development.md) for the fuller walkthrough.
 
-For deployment and verification notes, see [docs/deployment.md](docs/deployment.md).
-
-## Public Runtime API
+## Evaluation API
 
 Single flag:
 
@@ -151,7 +178,7 @@ content-type: application/json
 
 See [docs/api.md](docs/api.md) for the full contract.
 
-## JS SDK
+## JavaScript SDK
 
 ```ts
 import {FeatureFlagClient} from "@feature-flag-platform/sdk-js";
@@ -172,14 +199,22 @@ const many = await client.evaluateMany(["new_checkout", "new_nav"], {
 });
 ```
 
-## Docs
+## What This Repo Demonstrates
 
-- [docs/mvp-spec.md](docs/mvp-spec.md)
-- [docs/domain-model.md](docs/domain-model.md)
+- backend system design with explicit control-plane / data-plane boundaries
+- practical event-driven architecture for derived read models
+- correctness-first write paths with auditability
+- platform-style API surface design
+- a realistic hosting decision under budget constraints
+
+## Additional Docs
+
 - [docs/architecture.md](docs/architecture.md)
 - [docs/api.md](docs/api.md)
-- [docs/build-plan.md](docs/build-plan.md)
-- [docs/acceptance-demo.md](docs/acceptance-demo.md)
 - [docs/deployment.md](docs/deployment.md)
 - [docs/local-development.md](docs/local-development.md)
+- [docs/domain-model.md](docs/domain-model.md)
 - [docs/rationale.md](docs/rationale.md)
+- [docs/acceptance-demo.md](docs/acceptance-demo.md)
+- [docs/mvp-spec.md](docs/mvp-spec.md)
+- [docs/build-plan.md](docs/build-plan.md)
