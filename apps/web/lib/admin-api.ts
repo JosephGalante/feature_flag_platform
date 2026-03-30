@@ -571,10 +571,6 @@ export async function previewFlagForEnvironment(
   throw new Error("PREVIEW_FAILED");
 }
 
-export function isAdminApiUnavailableError(error: unknown): boolean {
-  return error instanceof Error && error.message === ADMIN_API_UNAVAILABLE_ERROR;
-}
-
 export async function getApiKeysForEnvironment(
   environmentId: string,
   sessionCookie?: string,
