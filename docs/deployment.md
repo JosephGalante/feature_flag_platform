@@ -8,7 +8,13 @@ This repo now includes:
 
 ## Suggested Deployment Shape
 
-Run three application processes:
+For the cheapest useful hosted deployment, run:
+
+1. API
+2. Web
+3. QStash
+
+For a more traditional always-on deployment, you can still run:
 
 1. API
 2. Web
@@ -34,8 +40,33 @@ docker build -f apps/worker/Dockerfile -t feature-flag-platform-worker .
 ## Runtime Notes
 
 - `apps/api` listens on `API_PORT` and needs Postgres, Redis, and `SESSION_SECRET`.
+- `apps/api` can publish projection refresh jobs to QStash when these env vars are set:
+  - `QSTASH_TOKEN`
+  - `QSTASH_CURRENT_SIGNING_KEY`
+  - `QSTASH_NEXT_SIGNING_KEY`
+  - `PUBLIC_API_BASE_URL`
 - `apps/web` needs `API_BASE_URL` pointed at the deployed API.
-- `apps/worker` needs Postgres and Redis access so it can process projection refresh events.
+- `apps/worker` remains available if you want an always-on process to handle projection refresh events instead of QStash.
+
+### Cheap Hosted Path
+
+Use:
+
+- Render for `apps/api`
+- Vercel for `apps/web`
+- Supabase for Postgres
+- Upstash Redis for Redis
+- Upstash QStash for async projection rebuild callbacks
+
+With that setup:
+
+- admin writes in the API publish signed QStash jobs
+- QStash calls back into the API at `/internal/projections/rebuild-async`
+- the API rebuilds the affected Redis projection without requiring a paid background worker
+
+### Worker Path
+
+If you prefer a dedicated background process, `apps/worker` still needs Postgres and Redis access so it can process projection refresh events and run reconciliation.
 
 For a public portfolio deployment, the web app can also use:
 

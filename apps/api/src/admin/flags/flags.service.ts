@@ -13,6 +13,7 @@ import {
 import type {JsonValue} from "@shared/json";
 import {asc, eq, inArray, sql} from "drizzle-orm";
 import type {ApiDatabase} from "../../lib/database";
+import type {ProjectionRefreshJobInput} from "../../projections/refresh-jobs";
 import {buildFlagAuditRow, toAuditFlagSnapshot} from "./audit";
 import {
   buildEditableConfigurationSnapshot,
@@ -23,6 +24,7 @@ import {buildProjectionRefreshEvent} from "./events";
 import {flagSummarySelect} from "./readModel";
 
 type ApiTransaction = Parameters<Parameters<ApiDatabase["transaction"]>[0]>[0];
+type ProjectionRefreshMode = "outbox" | "qstash";
 
 export type ConfigurationRuleType = ConfigurationRuleInput["ruleType"];
 export type AttributeMatchOperator = Extract<
@@ -140,6 +142,7 @@ type CreateFlagInput = {
   name: string;
   organizationId: string;
   projectId: string;
+  projectionRefreshMode: ProjectionRefreshMode;
   requestId: string;
 };
 
@@ -149,6 +152,7 @@ type UpdateFlagInput = {
   description?: string | null;
   flag: AuthorizedFlagAccess["flag"];
   name?: string;
+  projectionRefreshMode: ProjectionRefreshMode;
   requestId: string;
   status?: FeatureFlagStatus;
 };
@@ -158,6 +162,7 @@ type ReplaceFlagConfigurationInput = {
   currentDetail: FlagDetail;
   environments: ConfigurationEnvironmentInput[];
   flag: AuthorizedFlagAccess["flag"];
+  projectionRefreshMode: ProjectionRefreshMode;
   requestId: string;
   variants: ConfigurationVariantInput[];
 };
@@ -359,31 +364,52 @@ async function writeConfigurationAudit(
   );
 }
 
-async function emitConfigurationRefreshEvents(
+async function persistProjectionRefreshJobs(
+  trx: ApiTransaction,
+  projectionRefreshMode: ProjectionRefreshMode,
+  jobs: ReadonlyArray<ProjectionRefreshJobInput>,
+): Promise<ProjectionRefreshJobInput[]> {
+  if (jobs.length === 0) {
+    return [];
+  }
+
+  if (projectionRefreshMode === "outbox") {
+    await trx.insert(outboxEvents).values(jobs.map((job) => buildProjectionRefreshEvent(job)));
+    return [];
+  }
+
+  return [...jobs];
+}
+
+async function scheduleConfigurationRefreshJobs(
   trx: ApiTransaction,
   input: {
     actorUserId: string;
     environments: ConfigurationEnvironmentInput[];
     flag: AuthorizedFlagAccess["flag"];
+    projectionRefreshMode: ProjectionRefreshMode;
     requestId: string;
   },
-): Promise<void> {
-  await trx.insert(outboxEvents).values(
-    input.environments.map((environment) =>
-      buildProjectionRefreshEvent({
-        actorUserId: input.actorUserId,
-        environmentId: environment.environmentId,
-        featureFlagId: input.flag.id,
-        organizationId: input.flag.organizationId,
-        projectId: input.flag.projectId,
-        reason: "flag.configuration.updated",
-        requestId: input.requestId,
-      }),
-    ),
+): Promise<ProjectionRefreshJobInput[]> {
+  return await persistProjectionRefreshJobs(
+    trx,
+    input.projectionRefreshMode,
+    input.environments.map((environment) => ({
+      actorUserId: input.actorUserId,
+      environmentId: environment.environmentId,
+      featureFlagId: input.flag.id,
+      organizationId: input.flag.organizationId,
+      projectId: input.flag.projectId,
+      reason: "flag.configuration.updated",
+      requestId: input.requestId,
+    })),
   );
 }
 
-export async function createFlag(db: ApiDatabase, input: CreateFlagInput): Promise<FlagSummary> {
+export async function createFlag(
+  db: ApiDatabase,
+  input: CreateFlagInput,
+): Promise<{flag: FlagSummary; projectionRefreshJobs: ProjectionRefreshJobInput[]}> {
   try {
     return await db.transaction(async (trx) => {
       const environmentsForProject = await trx
@@ -421,6 +447,8 @@ export async function createFlag(db: ApiDatabase, input: CreateFlagInput): Promi
         })),
       );
 
+      let projectionRefreshJobs: ProjectionRefreshJobInput[] = [];
+
       if (environmentsForProject.length > 0) {
         await trx.insert(flagEnvironmentConfigs).values(
           environmentsForProject.map((environment) => ({
@@ -433,18 +461,18 @@ export async function createFlag(db: ApiDatabase, input: CreateFlagInput): Promi
           })),
         );
 
-        await trx.insert(outboxEvents).values(
-          environmentsForProject.map((environment) =>
-            buildProjectionRefreshEvent({
-              actorUserId: input.actorUserId,
-              environmentId: environment.environmentId,
-              featureFlagId: flag.id,
-              organizationId: input.organizationId,
-              projectId: input.projectId,
-              reason: "flag.created",
-              requestId: input.requestId,
-            }),
-          ),
+        projectionRefreshJobs = await persistProjectionRefreshJobs(
+          trx,
+          input.projectionRefreshMode,
+          environmentsForProject.map((environment) => ({
+            actorUserId: input.actorUserId,
+            environmentId: environment.environmentId,
+            featureFlagId: flag.id,
+            organizationId: input.organizationId,
+            projectId: input.projectId,
+            reason: "flag.created",
+            requestId: input.requestId,
+          })),
         );
       }
 
@@ -466,7 +494,10 @@ export async function createFlag(db: ApiDatabase, input: CreateFlagInput): Promi
         }),
       );
 
-      return flagSummary;
+      return {
+        flag: flagSummary,
+        projectionRefreshJobs,
+      };
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -480,7 +511,7 @@ export async function createFlag(db: ApiDatabase, input: CreateFlagInput): Promi
 export async function updateFlagMetadata(
   db: ApiDatabase,
   input: UpdateFlagInput,
-): Promise<FlagSummary> {
+): Promise<{flag: FlagSummary; projectionRefreshJobs: ProjectionRefreshJobInput[]}> {
   return db.transaction(async (trx) => {
     const now = new Date();
     const nextName = input.name ?? input.flag.name;
@@ -492,7 +523,10 @@ export async function updateFlagMetadata(
     const descriptionChanged = nextDescription !== input.flag.description;
 
     if (!statusChanged && !nameChanged && !descriptionChanged) {
-      return input.flag;
+      return {
+        flag: input.flag,
+        projectionRefreshJobs: [],
+      };
     }
 
     const [updatedFlag] = await trx
@@ -509,6 +543,8 @@ export async function updateFlagMetadata(
     if (!updatedFlag) {
       throw new Error("Failed to update feature flag.");
     }
+
+    let projectionRefreshJobs: ProjectionRefreshJobInput[] = [];
 
     if (statusChanged) {
       const affectedConfigs = await trx
@@ -528,18 +564,18 @@ export async function updateFlagMetadata(
         .where(eq(flagEnvironmentConfigs.featureFlagId, input.flag.id));
 
       if (affectedConfigs.length > 0) {
-        await trx.insert(outboxEvents).values(
-          affectedConfigs.map((config) =>
-            buildProjectionRefreshEvent({
-              actorUserId: input.actorUserId,
-              environmentId: config.environmentId,
-              featureFlagId: input.flag.id,
-              organizationId: input.flag.organizationId,
-              projectId: input.flag.projectId,
-              reason: input.action,
-              requestId: input.requestId,
-            }),
-          ),
+        projectionRefreshJobs = await persistProjectionRefreshJobs(
+          trx,
+          input.projectionRefreshMode,
+          affectedConfigs.map((config) => ({
+            actorUserId: input.actorUserId,
+            environmentId: config.environmentId,
+            featureFlagId: input.flag.id,
+            organizationId: input.flag.organizationId,
+            projectId: input.flag.projectId,
+            reason: input.action,
+            requestId: input.requestId,
+          })),
         );
       }
     }
@@ -562,14 +598,17 @@ export async function updateFlagMetadata(
       }),
     );
 
-    return updatedSummary;
+    return {
+      flag: updatedSummary,
+      projectionRefreshJobs,
+    };
   });
 }
 
 export async function replaceFlagConfiguration(
   db: ApiDatabase,
   input: ReplaceFlagConfigurationInput,
-): Promise<{changed: boolean}> {
+): Promise<{changed: boolean; projectionRefreshJobs: ProjectionRefreshJobInput[]}> {
   const currentSnapshot = buildEditableConfigurationSnapshot(input.currentDetail);
   const requestedSnapshot = buildRequestedConfigurationSnapshot({
     environments: input.environments,
@@ -577,7 +616,10 @@ export async function replaceFlagConfiguration(
   });
 
   if (JSON.stringify(currentSnapshot) === JSON.stringify(requestedSnapshot)) {
-    return {changed: false};
+    return {
+      changed: false,
+      projectionRefreshJobs: [],
+    };
   }
 
   validateConfigurationInput({
@@ -585,7 +627,7 @@ export async function replaceFlagConfiguration(
     variants: input.variants,
   });
 
-  await db.transaction(async (trx) => {
+  const projectionRefreshJobs = await db.transaction(async (trx) => {
     const configIdByEnvironmentId = await loadConfigIdByEnvironmentId(trx, input.flag.id);
     const now = new Date();
 
@@ -621,13 +663,17 @@ export async function replaceFlagConfiguration(
       requestId: input.requestId,
       requestedSnapshot,
     });
-    await emitConfigurationRefreshEvents(trx, {
+    return await scheduleConfigurationRefreshJobs(trx, {
       actorUserId: input.actorUserId,
       environments: input.environments,
       flag: input.flag,
+      projectionRefreshMode: input.projectionRefreshMode,
       requestId: input.requestId,
     });
   });
 
-  return {changed: true};
+  return {
+    changed: true,
+    projectionRefreshJobs,
+  };
 }

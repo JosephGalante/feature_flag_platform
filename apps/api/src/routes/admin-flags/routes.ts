@@ -8,6 +8,7 @@ import {
 import {findAuthorizedProject, listEnvironmentsForProject} from "@api/admin/service";
 import type {ApiConfig} from "@api/config";
 import type {ApiDatabase} from "@api/lib/database";
+import {publishProjectionRefreshJobs} from "@api/lib/qstash";
 import {readEnvironmentProjection} from "@api/lib/redis-projections";
 import {previewFlagEvaluation} from "@api/projections/preview-flag-evaluation";
 import type {EvaluationContext} from "@feature-flag-platform/evaluation-core";
@@ -34,6 +35,8 @@ export async function registerAdminFlagRoutes(
   db: ApiDatabase,
   config: ApiConfig,
 ): Promise<void> {
+  const projectionRefreshMode = config.qstash ? "qstash" : "outbox";
+
   app.get("/api/admin/projects/:projectId/flags", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
@@ -111,7 +114,7 @@ export async function registerAdminFlagRoutes(
     }
 
     try {
-      const flag = await createFlag(db, {
+      const result = await createFlag(db, {
         actorUserId: admin.user.id,
         description: parsedBody.data.description ?? null,
         flagType: parsedBody.data.flagType,
@@ -119,11 +122,16 @@ export async function registerAdminFlagRoutes(
         name: parsedBody.data.name,
         organizationId: project.organizationId,
         projectId: project.id,
+        projectionRefreshMode,
         requestId: request.id,
       });
 
+      if (config.qstash) {
+        await publishProjectionRefreshJobs(config.qstash, result.projectionRefreshJobs);
+      }
+
       return reply.code(201).send({
-        flag,
+        flag: result.flag,
       });
     } catch (error) {
       if (isKnownServiceError(error)) {
@@ -275,10 +283,11 @@ export async function registerAdminFlagRoutes(
         ? "flag.archived"
         : "flag.updated";
 
-    const flag = await updateFlagMetadata(db, {
+    const result = await updateFlagMetadata(db, {
       action: nextAction,
       actorUserId: admin.user.id,
       flag: access.flag,
+      projectionRefreshMode,
       requestId: request.id,
       ...(parsedBody.data.description !== undefined
         ? {description: parsedBody.data.description}
@@ -287,8 +296,12 @@ export async function registerAdminFlagRoutes(
       ...(parsedBody.data.status !== undefined ? {status: parsedBody.data.status} : {}),
     });
 
+    if (config.qstash) {
+      await publishProjectionRefreshJobs(config.qstash, result.projectionRefreshJobs);
+    }
+
     return reply.send({
-      flag,
+      flag: result.flag,
     });
   });
 
@@ -325,16 +338,21 @@ export async function registerAdminFlagRoutes(
       return;
     }
 
-    const flag = await updateFlagMetadata(db, {
+    const result = await updateFlagMetadata(db, {
       action: "flag.archived",
       actorUserId: admin.user.id,
       flag: access.flag,
+      projectionRefreshMode,
       requestId: request.id,
       status: "archived",
     });
 
+    if (config.qstash) {
+      await publishProjectionRefreshJobs(config.qstash, result.projectionRefreshJobs);
+    }
+
     return reply.send({
-      flag,
+      flag: result.flag,
     });
   });
 
@@ -403,9 +421,14 @@ export async function registerAdminFlagRoutes(
       currentDetail,
       environments,
       flag: access.flag,
+      projectionRefreshMode,
       requestId: request.id,
       variants,
     });
+
+    if (config.qstash) {
+      await publishProjectionRefreshJobs(config.qstash, result.projectionRefreshJobs);
+    }
 
     const detail = result.changed ? await getFlagDetail(db, access.flag.id) : currentDetail;
 

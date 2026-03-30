@@ -14,6 +14,10 @@ export async function buildApp(config: ApiConfig = readApiConfig()): Promise<Fas
     logger: true,
   });
 
+  app.addContentTypeParser("application/qstash+json", {parseAs: "string"}, (_, body, done) =>
+    done(null, body),
+  );
+
   const {db, pool} = createApiDatabase(config.databaseUrl);
 
   app.addHook("onClose", async () => {
