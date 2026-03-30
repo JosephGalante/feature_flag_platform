@@ -11,7 +11,7 @@ export function serializeEnvironmentProjection(projection: CompiledEnvironmentPr
 
 export function parseEnvironmentProjection(payload: string): CompiledEnvironmentProjection {
   try {
-    return JSON.parse(payload) as CompiledEnvironmentProjection;
+    return JSON.parse(payload);
   } catch (error) {
     throw new Error(
       `Invalid environment projection payload: ${

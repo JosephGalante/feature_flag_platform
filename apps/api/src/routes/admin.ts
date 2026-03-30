@@ -74,9 +74,7 @@ export async function registerAdminRoutes(
   app.get("/api/admin/me", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     return reply.send(admin);
   });
@@ -84,9 +82,7 @@ export async function registerAdminRoutes(
   app.get("/api/admin/organizations", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     return reply.send({
       organizations: admin.memberships,
@@ -96,9 +92,7 @@ export async function registerAdminRoutes(
   app.get("/api/admin/organizations/:organizationId/projects", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = organizationParamsSchema.safeParse(request.params);
 
@@ -129,9 +123,7 @@ export async function registerAdminRoutes(
   app.get("/api/admin/projects/:projectId/environments", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = projectParamsSchema.safeParse(request.params);
 

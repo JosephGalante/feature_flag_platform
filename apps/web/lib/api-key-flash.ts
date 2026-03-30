@@ -18,7 +18,7 @@ export function decodeApiKeyFlash(value: string | undefined): ApiKeyFlash | null
   try {
     const parsedValue = JSON.parse(
       Buffer.from(value, "base64url").toString("utf8"),
-    ) as Partial<ApiKeyFlash>;
+    );
 
     if (
       typeof parsedValue.keyPrefix !== "string" ||

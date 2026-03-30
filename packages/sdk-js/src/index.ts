@@ -119,7 +119,7 @@ export class FeatureFlagClient {
       },
       method: "POST",
     });
-    const payload = (await response.json()) as unknown;
+    const payload = await response.json();
 
     if (!response.ok) {
       throw readApiError(response.status, payload);

@@ -57,9 +57,7 @@ export async function registerAdminAuditLogRoutes(
   app.get("/api/admin/organizations/:organizationId/audit-logs", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = organizationParamsSchema.safeParse(request.params);
     const parsedQuery = organizationAuditQuerySchema.safeParse(request.query);
@@ -124,9 +122,7 @@ export async function registerAdminAuditLogRoutes(
   app.get("/api/admin/entities/:entityType/:entityId/audit-logs", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = entityParamsSchema.safeParse(request.params);
     const parsedQuery = paginationQuerySchema.safeParse(request.query);

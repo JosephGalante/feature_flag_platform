@@ -209,9 +209,7 @@ export async function registerAdminFlagRoutes(
   app.get("/api/admin/projects/:projectId/flags", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = projectParamsSchema.safeParse(request.params);
     const parsedQuery = flagListQuerySchema.safeParse(request.query);
@@ -250,9 +248,7 @@ export async function registerAdminFlagRoutes(
   app.post("/api/admin/projects/:projectId/flags", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = projectParamsSchema.safeParse(request.params);
     const parsedBody = createFlagBodySchema.safeParse(request.body);
@@ -316,9 +312,7 @@ export async function registerAdminFlagRoutes(
   app.get("/api/admin/flags/:flagId", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = flagParamsSchema.safeParse(request.params);
 
@@ -353,9 +347,7 @@ export async function registerAdminFlagRoutes(
   app.post("/api/admin/flags/:flagId/preview", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = flagParamsSchema.safeParse(request.params);
     const parsedBody = previewBodySchema.safeParse(request.body);
@@ -416,9 +408,7 @@ export async function registerAdminFlagRoutes(
   app.patch("/api/admin/flags/:flagId", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = flagParamsSchema.safeParse(request.params);
     const parsedBody = updateFlagBodySchema.safeParse(request.body);
@@ -477,9 +467,7 @@ export async function registerAdminFlagRoutes(
   app.post("/api/admin/flags/:flagId/archive", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = flagParamsSchema.safeParse(request.params);
 
@@ -525,9 +513,7 @@ export async function registerAdminFlagRoutes(
   app.put("/api/admin/flags/:flagId/configuration", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = flagParamsSchema.safeParse(request.params);
     const parsedBody = configurationBodySchema.safeParse(request.body);

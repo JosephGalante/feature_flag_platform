@@ -40,7 +40,7 @@ function createFakeWorkerDatabase(rows: FakeClaimedEventRow[]): {
 
   const trx = {
     execute: async () => ({
-      rows: rows.length > 0 ? [rows.shift() as FakeClaimedEventRow] : [],
+      rows: rows.length > 0 ? [rows.shift()] : [],
     }),
     update: () => createUpdateBuilder(),
   };

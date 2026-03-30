@@ -237,7 +237,7 @@ function buildProjectionRefreshEvent(input: {
       projectId: input.projectId,
       reason: input.reason,
       triggeredByUserId: input.actorUserId,
-    } satisfies JsonValue,
+    },
     status: "pending" as const,
   };
 }
@@ -809,9 +809,7 @@ export async function replaceFlagConfiguration(
       .from(flagEnvironmentConfigs)
       .where(eq(flagEnvironmentConfigs.featureFlagId, input.flag.id));
 
-    const configIdByEnvironmentId = new Map(
-      configRows.map((row) => [row.environmentId, row.id] as const),
-    );
+    const configIdByEnvironmentId = new Map(configRows.map((row) => [row.environmentId, row.id]));
     const now = new Date();
 
     await trx.delete(flagRules).where(

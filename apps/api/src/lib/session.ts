@@ -119,7 +119,7 @@ export function readSessionUserId(
   try {
     const decoded = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8"),
-    ) as Partial<SessionPayload>;
+    );
     return typeof decoded.userId === "string" && decoded.userId.length > 0 ? decoded.userId : null;
   } catch {
     return null;

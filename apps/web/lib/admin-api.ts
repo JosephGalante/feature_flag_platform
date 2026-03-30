@@ -260,7 +260,7 @@ async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
   let data: T | null = null;
 
   if (text.length > 0) {
-    data = JSON.parse(text) as T;
+    data = JSON.parse(text);
   }
 
   return {

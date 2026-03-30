@@ -31,9 +31,7 @@ export async function registerAdminApiKeyRoutes(
   app.get("/api/admin/environments/:environmentId/api-keys", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = environmentParamsSchema.safeParse(request.params);
 
@@ -68,9 +66,7 @@ export async function registerAdminApiKeyRoutes(
   app.post("/api/admin/environments/:environmentId/api-keys", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = environmentParamsSchema.safeParse(request.params);
     const parsedBody = createApiKeyBodySchema.safeParse(request.body);
@@ -121,9 +117,7 @@ export async function registerAdminApiKeyRoutes(
   app.post("/api/admin/api-keys/:apiKeyId/revoke", async (request, reply) => {
     const admin = await requireAuthenticatedAdmin(request, reply, db, config);
 
-    if (!admin) {
-      return;
-    }
+    if (!admin) return;
 
     const parsedParams = apiKeyParamsSchema.safeParse(request.params);
 
