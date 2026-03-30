@@ -94,7 +94,7 @@ type AdminFlagEnvironment = {
   rules: AdminFlagRule[];
 };
 
-export type AdminFlagDetail = {
+type AdminFlagDetail = {
   environments: AdminFlagEnvironment[];
   flag: AdminFlagSummary;
   variants: AdminFlagVariant[];
