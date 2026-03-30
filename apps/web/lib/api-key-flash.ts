@@ -1,6 +1,6 @@
 export const API_KEY_FLASH_COOKIE_NAME = "ff_api_key_flash";
 
-export type ApiKeyFlash = {
+type ApiKeyFlash = {
   keyPrefix: string;
   name: string;
   rawKey: string;
