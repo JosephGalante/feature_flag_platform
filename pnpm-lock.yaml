@@ -44,6 +44,9 @@ importers:
       '@feature-flag-platform/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@feature-flag-platform/evaluation-core':
+        specifier: workspace:*
+        version: link:../../packages/evaluation-core
       '@feature-flag-platform/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -86,13 +89,33 @@ importers:
         specifier: ^19.0.2
         version: 19.2.3(@types/react@19.2.14)
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@feature-flag-platform/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@feature-flag-platform/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(@types/pg@8.20.0)(pg@8.20.0)
+      pg:
+        specifier: ^8.13.1
+        version: 8.20.0
 
   packages/config: {}
 
   packages/evaluation-core: {}
 
-  packages/sdk-js: {}
+  packages/sdk-js:
+    dependencies:
+      '@feature-flag-platform/evaluation-core':
+        specifier: workspace:*
+        version: link:../evaluation-core
 
   packages/shared:
     dependencies:
