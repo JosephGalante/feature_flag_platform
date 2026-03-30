@@ -1,3 +1,4 @@
+import {updateFlagEnvironmentAction} from "@/app/actions";
 import {
   type AdminFlagRule,
   SESSION_COOKIE_NAME,
@@ -74,6 +75,32 @@ function formatRule(rule: AdminFlagRule): string {
   return `${rule.ruleType} -> ${rule.variantKey}`;
 }
 
+function readNoticeMessage(value: string | string[] | undefined): string | null {
+  switch (readParam(value)) {
+    case "environment_saved":
+      return "Environment configuration saved.";
+    case "no_changes":
+      return "No configuration changes were detected.";
+    default:
+      return null;
+  }
+}
+
+function readErrorMessage(value: string | string[] | undefined): string | null {
+  switch (readParam(value)) {
+    case "flag_not_found":
+      return "The flag could not be reloaded before saving.";
+    case "invalid_form":
+      return "The submitted environment update was incomplete.";
+    case "invalid_variant":
+      return "The selected default variant is not valid for this flag.";
+    case "save_failed":
+      return "The API rejected the environment update.";
+    default:
+      return null;
+  }
+}
+
 export default async function FlagDetailPage({params, searchParams}: FlagDetailPageProps) {
   const [{flagId}, query] = await Promise.all([params, searchParams]);
   const resolvedQuery = query ?? {};
@@ -97,16 +124,18 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
     organizationId: readParam(resolvedQuery.organizationId),
     projectId: readParam(resolvedQuery.projectId),
   });
+  const noticeMessage = readNoticeMessage(resolvedQuery.notice);
+  const errorMessage = readErrorMessage(resolvedQuery.error);
 
   return (
     <main className="shell">
       <section className="detail-header">
         <div>
-          <p className="eyebrow">Phase 4 / Slice 2</p>
+          <p className="eyebrow">Phase 4 / Slice 3</p>
           <h1>{detail.flag.name}</h1>
           <p className="hero-copy">
-            Read-only detail view for one flag. Metadata, variants, and environment rules are live
-            from the admin API.
+            Metadata, variants, and environment settings are live from the admin API. This slice
+            adds the first editable controls at the environment level.
           </p>
         </div>
         <div className="detail-actions">
@@ -115,6 +144,13 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
           </Link>
         </div>
       </section>
+
+      {noticeMessage ? (
+        <p className="detail-feedback detail-feedback-success">{noticeMessage}</p>
+      ) : null}
+      {errorMessage ? (
+        <p className="detail-feedback detail-feedback-error">{errorMessage}</p>
+      ) : null}
 
       <section className="summary-grid">
         <article className="panel stat-card">
@@ -194,6 +230,56 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
                     Updated {formatTimestamp(environmentDetail.config.updatedAt)}
                   </p>
                 </div>
+
+                <form action={updateFlagEnvironmentAction} className="environment-form">
+                  <input name="flagId" type="hidden" value={detail.flag.id} />
+                  <input
+                    name="organizationId"
+                    type="hidden"
+                    value={readParam(resolvedQuery.organizationId) ?? ""}
+                  />
+                  <input
+                    name="projectId"
+                    type="hidden"
+                    value={readParam(resolvedQuery.projectId) ?? ""}
+                  />
+                  <input
+                    name="environmentId"
+                    type="hidden"
+                    value={environmentDetail.environment.id}
+                  />
+
+                  <div className="environment-form-grid">
+                    <label className="context-field">
+                      <span>State</span>
+                      <select
+                        defaultValue={environmentDetail.config.enabled ? "true" : "false"}
+                        name="enabled"
+                      >
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </label>
+
+                    <label className="context-field">
+                      <span>Default variant</span>
+                      <select
+                        defaultValue={environmentDetail.config.defaultVariantKey}
+                        name="defaultVariantKey"
+                      >
+                        {detail.variants.map((variant) => (
+                          <option key={variant.id} value={variant.key}>
+                            {variant.key}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <button className="primary-button environment-save-button" type="submit">
+                    Save environment
+                  </button>
+                </form>
 
                 {environmentDetail.rules.length === 0 ? (
                   <p className="empty-inline">

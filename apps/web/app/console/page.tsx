@@ -161,7 +161,7 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
             <h2>Project inventory</h2>
           </div>
           <p className="table-hint">
-            This slice adds a linked read-only detail view. Edit controls come next.
+            Open a flag to review its environments and change default rollout settings.
           </p>
         </div>
 
@@ -180,35 +180,40 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
                   <th>Type</th>
                   <th>Status</th>
                   <th>Updated</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {flags.map((flag) => (
-                  <tr key={flag.id}>
-                    <td>
-                      <Link
-                        className="flag-link"
-                        href={buildFlagDetailHref({
-                          environmentId: selectedEnvironment?.id ?? null,
-                          flagId: flag.id,
-                          organizationId: selectedOrganization?.organizationId ?? null,
-                          projectId: selectedProject?.id ?? null,
-                        })}
-                      >
+                {flags.map((flag) => {
+                  const detailHref = buildFlagDetailHref({
+                    environmentId: selectedEnvironment?.id ?? null,
+                    flagId: flag.id,
+                    organizationId: selectedOrganization?.organizationId ?? null,
+                    projectId: selectedProject?.id ?? null,
+                  });
+
+                  return (
+                    <tr key={flag.id}>
+                      <td>
                         <div className="flag-name">{flag.name}</div>
-                      </Link>
-                      <div className="flag-description">
-                        {flag.description ?? "No description yet."}
-                      </div>
-                    </td>
-                    <td>{flag.key}</td>
-                    <td>{flag.flagType}</td>
-                    <td>
-                      <span className={`status-pill status-${flag.status}`}>{flag.status}</span>
-                    </td>
-                    <td>{formatTimestamp(flag.updatedAt)}</td>
-                  </tr>
-                ))}
+                        <div className="flag-description">
+                          {flag.description ?? "No description yet."}
+                        </div>
+                      </td>
+                      <td>{flag.key}</td>
+                      <td>{flag.flagType}</td>
+                      <td>
+                        <span className={`status-pill status-${flag.status}`}>{flag.status}</span>
+                      </td>
+                      <td>{formatTimestamp(flag.updatedAt)}</td>
+                      <td>
+                        <Link className="table-link-button" href={detailHref}>
+                          Details
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

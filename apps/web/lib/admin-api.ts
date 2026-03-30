@@ -100,6 +100,39 @@ type AdminFlagDetail = {
   variants: AdminFlagVariant[];
 };
 
+type AttributeMatchConfigurationRuleInput = {
+  attributeKey: string;
+  comparisonValue: string | string[];
+  operator: "equals" | "in";
+  ruleType: "attribute_match";
+  sortOrder: number;
+  variantKey: string;
+};
+
+type PercentageRolloutConfigurationRuleInput = {
+  rolloutPercentage: number;
+  ruleType: "percentage_rollout";
+  sortOrder: number;
+  variantKey: string;
+};
+
+type ConfigurationRuleInput =
+  | AttributeMatchConfigurationRuleInput
+  | PercentageRolloutConfigurationRuleInput;
+
+type ConfigurationEnvironmentInput = {
+  defaultVariantKey: string;
+  enabled: boolean;
+  environmentId: string;
+  rules: ConfigurationRuleInput[];
+};
+
+type ConfigurationVariantInput = {
+  description: string | null;
+  key: string;
+  value: unknown;
+};
+
 type ProjectsResponse = {
   organization: AdminMembership;
   projects: AdminProject[];
@@ -116,6 +149,16 @@ type FlagsResponse = {
 };
 
 type FlagDetailResponse = AdminFlagDetail;
+
+type ReplaceFlagConfigurationRequest = {
+  environments: ConfigurationEnvironmentInput[];
+  variants: ConfigurationVariantInput[];
+};
+
+type ReplaceFlagConfigurationResponse = {
+  changed: boolean;
+  detail: AdminFlagDetail;
+};
 
 type LoginResponse = {
   memberships: AdminMembership[];
@@ -271,6 +314,32 @@ export async function getFlagDetail(
 
   if (response.status !== 200 || !response.data) {
     throw new Error("Failed to load flag detail.");
+  }
+
+  return response.data;
+}
+
+export async function replaceFlagConfiguration(
+  flagId: string,
+  input: ReplaceFlagConfigurationRequest,
+  sessionCookie?: string,
+): Promise<ReplaceFlagConfigurationResponse> {
+  const response = await apiFetch<ReplaceFlagConfigurationResponse>(
+    `/api/admin/flags/${flagId}/configuration`,
+    {
+      init: {
+        body: JSON.stringify(input),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "PUT",
+      },
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to save flag configuration.");
   }
 
   return response.data;
