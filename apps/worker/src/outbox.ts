@@ -36,6 +36,14 @@ export type ProcessProjectionRefreshBatchResult = {
   retriedCount: number;
 };
 
+type ProjectionRefreshDependencies = {
+  rebuildProjection: typeof rebuildEnvironmentProjection;
+};
+
+const defaultDependencies: ProjectionRefreshDependencies = {
+  rebuildProjection: rebuildEnvironmentProjection,
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -145,6 +153,7 @@ export async function processNextProjectionRefreshEvent(
   db: WorkerDatabase,
   redisUrl: string,
   now: Date = new Date(),
+  dependencies: ProjectionRefreshDependencies = defaultDependencies,
 ): Promise<ProcessProjectionRefreshOutcome> {
   return await db.transaction(async (trx) => {
     const result = await trx.execute(sql<ClaimedProjectionRefreshEvent>`
@@ -186,7 +195,7 @@ export async function processNextProjectionRefreshEvent(
     }
 
     try {
-      const rebuildResult = await rebuildEnvironmentProjection(
+      const rebuildResult = await dependencies.rebuildProjection(
         db,
         redisUrl,
         payload.environmentId,
@@ -225,6 +234,7 @@ export async function processProjectionRefreshBatch(
   redisUrl: string,
   nowProvider: () => Date = () => new Date(),
   maxBatchSize = MAX_BATCH_SIZE,
+  dependencies: ProjectionRefreshDependencies = defaultDependencies,
 ): Promise<ProcessProjectionRefreshBatchResult> {
   const result: ProcessProjectionRefreshBatchResult = {
     failedCount: 0,
@@ -233,7 +243,12 @@ export async function processProjectionRefreshBatch(
   };
 
   for (let processedCount = 0; processedCount < maxBatchSize; processedCount += 1) {
-    const outcome = await processNextProjectionRefreshEvent(db, redisUrl, nowProvider());
+    const outcome = await processNextProjectionRefreshEvent(
+      db,
+      redisUrl,
+      nowProvider(),
+      dependencies,
+    );
 
     if (outcome.status === "idle") {
       break;
