@@ -1,27 +1,3 @@
-/*
-REVIEW NOTES
-
-1. Extract a shared `flagSummarySelect`
-   The `FlagSummary` projection is repeated in multiple selects and returning clauses. Centralizing that shape would reduce drift risk and shorten several functions.
-
-2. Clean up `findAuthorizedFlagAccess`
-   It currently selects flag fields plus `role`, then manually reconstructs the `flag` object. A mapper or shared select shape would make that cleaner. Also, the function appears to authorize via org membership, so that behavior should be explicit.
-
-3. Deduplicate configuration snapshot builders
-   `buildEditableConfigurationSnapshot` and `buildRequestedConfigurationSnapshot` repeat a lot of normalization and sorting logic. Pull out shared helpers for variants, rules, and environment sorting.
-
-4. Strengthen audit action typing
-   `buildFlagAuditRow` accepts `action: string`. A dedicated union type for audit actions would catch typos at compile time.
-
-5. Standardize timestamp handling in transactions
-   In `updateFlagMetadata`, capture `const now = new Date()` once and reuse it for all touched rows, the same way `replaceFlagConfiguration` already does.
-
-6. Break up `replaceFlagConfiguration`
-   This is the densest function in the file. Good helper extraction points are: loading config IDs, replacing variants, updating one environment config, inserting rules, writing the audit row, and emitting projection refresh events.
-
-7. Document the delete-and-reinsert strategy
-   `replaceFlagConfiguration` deletes and recreates variants and rules. That is simple, but it churns IDs. If intentional, add a comment saying so. If stable IDs matter, reconsider the approach.
-*/
 import {
   type FeatureFlagStatus,
   type FeatureFlagType,
@@ -37,19 +13,9 @@ import {
   outboxEvents,
   projects,
 } from "@shared/database";
-import type { JsonValue } from "@shared/json";
-import {
-  type SQL,
-  and,
-  asc,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  or,
-  sql,
-} from "drizzle-orm";
-import type { ApiDatabase } from "../lib/database";
+import type {JsonValue} from "@shared/json";
+import {type SQL, and, asc, desc, eq, ilike, inArray, or, sql} from "drizzle-orm";
+import type {ApiDatabase} from "../lib/database";
 
 type FlagVariantSeed = {
   description: string;
@@ -165,7 +131,7 @@ type CreateFlagInput = {
 };
 
 type UpdateFlagInput = {
-  action: "flag.archived" | "flag.updated";
+  action: Extract<FlagAuditAction, "flag.archived" | "flag.updated">;
   actorUserId: string;
   description?: string | null;
   flag: AuthorizedFlagAccess["flag"];
@@ -210,6 +176,12 @@ type EditableConfigurationSnapshot = {
     value: JsonValue;
   }>;
 };
+
+type FlagAuditAction =
+  | "flag.created"
+  | "flag.updated"
+  | "flag.archived"
+  | "flag.configuration.updated";
 
 const flagSummarySelect = {
   createdAt: featureFlags.createdAt,
@@ -295,7 +267,7 @@ function buildProjectionRefreshEvent(input: {
 }
 
 function buildFlagAuditRow(input: {
-  action: string;
+  action: FlagAuditAction;
   actorUserId: string;
   after: JsonValue | null;
   before: JsonValue | null;
@@ -354,40 +326,72 @@ function normalizeJsonValue(value: JsonValue): JsonValue {
   );
 }
 
-function buildEditableConfigurationSnapshot(
-  detail: FlagDetail,
-): EditableConfigurationSnapshot {
+type SnapshotVariantInput = {
+  description: string | null;
+  key: string;
+  value: JsonValue;
+};
+
+type SnapshotRule = EditableConfigurationSnapshot["environments"][number]["rules"][number];
+type SnapshotEnvironment = EditableConfigurationSnapshot["environments"][number];
+
+function normalizeSnapshotVariants(
+  variants: SnapshotVariantInput[],
+): EditableConfigurationSnapshot["variants"] {
+  return variants
+    .map((v) => ({
+      description: v.description,
+      key: v.key,
+      value: normalizeJsonValue(v.value),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function normalizeEditableRules(rules: FlagRuleDetail[]): SnapshotRule[] {
+  return rules
+    .map((rule) => ({
+      attributeKey: rule.attributeKey,
+      comparisonValue:
+        rule.comparisonValue === null ? null : normalizeJsonValue(rule.comparisonValue),
+      operator: rule.operator,
+      rolloutPercentage: rule.rolloutPercentage,
+      ruleType: rule.ruleType,
+      sortOrder: rule.sortOrder,
+      variantKey: rule.variantKey,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function normalizeRequestedRules(rules: ConfigurationRuleInput[]): SnapshotRule[] {
+  return rules
+    .map((rule) => ({
+      attributeKey: rule.ruleType === "attribute_match" ? rule.attributeKey : null,
+      comparisonValue:
+        rule.ruleType === "attribute_match" ? normalizeJsonValue(rule.comparisonValue) : null,
+      operator: rule.ruleType === "attribute_match" ? rule.operator : null,
+      rolloutPercentage: rule.ruleType === "percentage_rollout" ? rule.rolloutPercentage : null,
+      ruleType: rule.ruleType,
+      sortOrder: rule.sortOrder,
+      variantKey: rule.variantKey,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function sortSnapshotEnvironments(environments: SnapshotEnvironment[]): SnapshotEnvironment[] {
+  return environments.sort((a, b) => a.environmentId.localeCompare(b.environmentId));
+}
+
+function buildEditableConfigurationSnapshot(detail: FlagDetail): EditableConfigurationSnapshot {
   return {
-    environments: detail.environments
-      .map((environment) => ({
+    environments: sortSnapshotEnvironments(
+      detail.environments.map((environment) => ({
         defaultVariantKey: environment.config.defaultVariantKey,
         enabled: environment.config.enabled,
         environmentId: environment.environment.id,
-        rules: environment.rules
-          .map((rule) => ({
-            attributeKey: rule.attributeKey,
-            comparisonValue:
-              rule.comparisonValue === null
-                ? null
-                : normalizeJsonValue(rule.comparisonValue),
-            operator: rule.operator,
-            rolloutPercentage: rule.rolloutPercentage,
-            ruleType: rule.ruleType,
-            sortOrder: rule.sortOrder,
-            variantKey: rule.variantKey,
-          }))
-          .sort((left, right) => left.sortOrder - right.sortOrder),
-      }))
-      .sort((left, right) =>
-        left.environmentId.localeCompare(right.environmentId),
-      ),
-    variants: detail.variants
-      .map((variant) => ({
-        description: variant.description,
-        key: variant.key,
-        value: normalizeJsonValue(variant.value),
-      }))
-      .sort((left, right) => left.key.localeCompare(right.key)),
+        rules: normalizeEditableRules(environment.rules),
+      })),
+    ),
+    variants: normalizeSnapshotVariants(detail.variants),
   };
 }
 
@@ -396,57 +400,23 @@ function buildRequestedConfigurationSnapshot(input: {
   variants: ConfigurationVariantInput[];
 }): EditableConfigurationSnapshot {
   return {
-    environments: input.environments
-      .map((environment) => ({
+    environments: sortSnapshotEnvironments(
+      input.environments.map((environment) => ({
         defaultVariantKey: environment.defaultVariantKey,
         enabled: environment.enabled,
         environmentId: environment.environmentId,
-        rules: environment.rules
-          .map((rule) => ({
-            attributeKey:
-              rule.ruleType === "attribute_match" ? rule.attributeKey : null,
-            comparisonValue:
-              rule.ruleType === "attribute_match"
-                ? normalizeJsonValue(rule.comparisonValue)
-                : null,
-            operator:
-              rule.ruleType === "attribute_match" ? rule.operator : null,
-            rolloutPercentage:
-              rule.ruleType === "percentage_rollout"
-                ? rule.rolloutPercentage
-                : null,
-            ruleType: rule.ruleType,
-            sortOrder: rule.sortOrder,
-            variantKey: rule.variantKey,
-          }))
-          .sort((left, right) => left.sortOrder - right.sortOrder),
-      }))
-      .sort((left, right) =>
-        left.environmentId.localeCompare(right.environmentId),
-      ),
-    variants: input.variants
-      .map((variant) => ({
-        description: variant.description,
-        key: variant.key,
-        value: normalizeJsonValue(variant.value),
-      }))
-      .sort((left, right) => left.key.localeCompare(right.key)),
+        rules: normalizeRequestedRules(environment.rules),
+      })),
+    ),
+    variants: normalizeSnapshotVariants(input.variants),
   };
 }
 
-function isUniqueViolation(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
+function isUniqueViolation(error: unknown): error is {code: string} {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
-async function selectFlagSummary(
-  db: ApiDatabase,
-  flagId: string,
-): Promise<FlagSummary | null> {
+async function selectFlagSummary(db: ApiDatabase, flagId: string): Promise<FlagSummary | null> {
   const [flag] = await db
     .select(flagSummarySelectWithOrg)
     .from(featureFlags)
@@ -469,10 +439,7 @@ export async function listFlagsForProject(
 
   if (input.search) {
     const pattern = `%${input.search}%`;
-    const searchCondition = or(
-      ilike(featureFlags.key, pattern),
-      ilike(featureFlags.name, pattern),
-    );
+    const searchCondition = or(ilike(featureFlags.key, pattern), ilike(featureFlags.name, pattern));
 
     if (searchCondition) {
       conditions.push(searchCondition);
@@ -493,13 +460,10 @@ export async function findAuthorizedFlagAccess(
   userId: string,
 ): Promise<AuthorizedFlagAccess | null> {
   const [flag] = await db
-    .select({ ...flagSummarySelectWithOrg, role: memberships.role })
+    .select({...flagSummarySelectWithOrg, role: memberships.role})
     .from(featureFlags)
     .innerJoin(projects, eq(featureFlags.projectId, projects.id))
-    .innerJoin(
-      memberships,
-      eq(projects.organizationId, memberships.organizationId),
-    )
+    .innerJoin(memberships, eq(projects.organizationId, memberships.organizationId))
     .where(and(eq(featureFlags.id, flagId), eq(memberships.userId, userId)))
     .limit(1);
 
@@ -507,28 +471,15 @@ export async function findAuthorizedFlagAccess(
     return null;
   }
 
+  const {role, ...flagData} = flag;
+
   return {
-    flag: {
-      createdAt: flag.createdAt,
-      createdByUserId: flag.createdByUserId,
-      description: flag.description,
-      flagType: flag.flagType,
-      id: flag.id,
-      key: flag.key,
-      name: flag.name,
-      organizationId: flag.organizationId,
-      projectId: flag.projectId,
-      status: flag.status,
-      updatedAt: flag.updatedAt,
-    },
-    role: flag.role,
+    flag: flagData,
+    role,
   };
 }
 
-export async function getFlagDetail(
-  db: ApiDatabase,
-  flagId: string,
-): Promise<FlagDetail | null> {
+export async function getFlagDetail(db: ApiDatabase, flagId: string): Promise<FlagDetail | null> {
   const flag = await selectFlagSummary(db, flagId);
 
   if (!flag) {
@@ -561,10 +512,7 @@ export async function getFlagDetail(
       environmentSortOrder: environments.sortOrder,
     })
     .from(flagEnvironmentConfigs)
-    .innerJoin(
-      environments,
-      eq(flagEnvironmentConfigs.environmentId, environments.id),
-    )
+    .innerJoin(environments, eq(flagEnvironmentConfigs.environmentId, environments.id))
     .where(eq(flagEnvironmentConfigs.featureFlagId, flagId))
     .orderBy(asc(environments.sortOrder), asc(environments.name));
 
@@ -631,10 +579,7 @@ export async function getFlagDetail(
   };
 }
 
-export async function createFlag(
-  db: ApiDatabase,
-  input: CreateFlagInput,
-): Promise<FlagSummary> {
+export async function createFlag(db: ApiDatabase, input: CreateFlagInput): Promise<FlagSummary> {
   try {
     return await db.transaction(async (trx) => {
       const environmentsForProject = await trx
@@ -733,11 +678,10 @@ export async function updateFlagMetadata(
   input: UpdateFlagInput,
 ): Promise<FlagSummary> {
   return db.transaction(async (trx) => {
+    const now = new Date();
     const nextName = input.name ?? input.flag.name;
     const nextDescription =
-      input.description === undefined
-        ? input.flag.description
-        : input.description;
+      input.description === undefined ? input.flag.description : input.description;
     const nextStatus = input.status ?? input.flag.status;
     const statusChanged = nextStatus !== input.flag.status;
     const nameChanged = nextName !== input.flag.name;
@@ -753,7 +697,7 @@ export async function updateFlagMetadata(
         description: nextDescription,
         name: nextName,
         status: nextStatus,
-        updatedAt: new Date(),
+        updatedAt: now,
       })
       .where(eq(featureFlags.id, input.flag.id))
       .returning(flagSummarySelect);
@@ -774,7 +718,7 @@ export async function updateFlagMetadata(
         .update(flagEnvironmentConfigs)
         .set({
           projectionVersion: sql`${flagEnvironmentConfigs.projectionVersion} + 1`,
-          updatedAt: new Date(),
+          updatedAt: now,
           updatedByUserId: input.actorUserId,
         })
         .where(eq(flagEnvironmentConfigs.featureFlagId, input.flag.id));
@@ -821,17 +765,15 @@ export async function updateFlagMetadata(
 export async function replaceFlagConfiguration(
   db: ApiDatabase,
   input: ReplaceFlagConfigurationInput,
-): Promise<{ changed: boolean }> {
-  const currentSnapshot = buildEditableConfigurationSnapshot(
-    input.currentDetail,
-  );
+): Promise<{changed: boolean}> {
+  const currentSnapshot = buildEditableConfigurationSnapshot(input.currentDetail);
   const requestedSnapshot = buildRequestedConfigurationSnapshot({
     environments: input.environments,
     variants: input.variants,
   });
 
   if (JSON.stringify(currentSnapshot) === JSON.stringify(requestedSnapshot)) {
-    return { changed: false };
+    return {changed: false};
   }
 
   await db.transaction(async (trx) => {
@@ -843,9 +785,7 @@ export async function replaceFlagConfiguration(
       .from(flagEnvironmentConfigs)
       .where(eq(flagEnvironmentConfigs.featureFlagId, input.flag.id));
 
-    const configIdByEnvironmentId = new Map(
-      configRows.map((row) => [row.environmentId, row.id]),
-    );
+    const configIdByEnvironmentId = new Map(configRows.map((row) => [row.environmentId, row.id]));
     const now = new Date();
 
     await trx.delete(flagRules).where(
@@ -854,9 +794,7 @@ export async function replaceFlagConfiguration(
         configRows.map((row) => row.id),
       ),
     );
-    await trx
-      .delete(flagVariants)
-      .where(eq(flagVariants.featureFlagId, input.flag.id));
+    await trx.delete(flagVariants).where(eq(flagVariants.featureFlagId, input.flag.id));
 
     await trx.insert(flagVariants).values(
       input.variants.map((variant) => ({
@@ -871,9 +809,7 @@ export async function replaceFlagConfiguration(
       const configId = configIdByEnvironmentId.get(environment.environmentId);
 
       if (!configId) {
-        throw new Error(
-          `Missing environment config for environment ${environment.environmentId}`,
-        );
+        throw new Error(`Missing environment config for environment ${environment.environmentId}`);
       }
 
       await trx
@@ -890,17 +826,12 @@ export async function replaceFlagConfiguration(
       if (environment.rules.length > 0) {
         await trx.insert(flagRules).values(
           environment.rules.map((rule) => ({
-            attributeKey:
-              rule.ruleType === "attribute_match" ? rule.attributeKey : null,
-            comparisonValueJson:
-              rule.ruleType === "attribute_match" ? rule.comparisonValue : null,
+            attributeKey: rule.ruleType === "attribute_match" ? rule.attributeKey : null,
+            comparisonValueJson: rule.ruleType === "attribute_match" ? rule.comparisonValue : null,
             flagEnvironmentConfigId: configId,
-            operator:
-              rule.ruleType === "attribute_match" ? rule.operator : null,
+            operator: rule.ruleType === "attribute_match" ? rule.operator : null,
             rolloutPercentage:
-              rule.ruleType === "percentage_rollout"
-                ? rule.rolloutPercentage
-                : null,
+              rule.ruleType === "percentage_rollout" ? rule.rolloutPercentage : null,
             ruleType: rule.ruleType,
             sortOrder: rule.sortOrder,
             variantKey: rule.variantKey,
@@ -944,5 +875,5 @@ export async function replaceFlagConfiguration(
     );
   });
 
-  return { changed: true };
+  return {changed: true};
 }
