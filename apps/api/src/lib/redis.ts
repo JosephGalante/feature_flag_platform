@@ -7,6 +7,12 @@ type RedisReply =
   | {kind: "null_bulk_string"}
   | {kind: "simple_string"; value: string};
 
+type RedisConnection = {
+  authArguments: ReadonlyArray<string> | null;
+  host: string;
+  port: number;
+};
+
 function findLineTerminator(buffer: Buffer, start = 0): number {
   return buffer.indexOf("\r\n", start, "utf8");
 }
@@ -108,22 +114,35 @@ export function parseRedisReply(buffer: Buffer): {bytesConsumed: number; reply: 
   throw new Error(`Unsupported Redis reply prefix: ${prefix}`);
 }
 
-function readRedisConnection(redisUrl: string): {host: string; port: number} {
+function decodeRedisUrlComponent(value: string): string {
+  return decodeURIComponent(value);
+}
+
+function readRedisConnection(redisUrl: string): RedisConnection {
   const url = new URL(redisUrl);
 
   if (url.protocol !== "redis:") {
     throw new Error(`Unsupported Redis protocol: ${url.protocol}`);
   }
 
-  if (url.username.length > 0 || url.password.length > 0) {
-    throw new Error("Redis auth is not supported by the lightweight Redis client.");
-  }
-
   if (url.pathname.length > 0 && url.pathname !== "/" && url.pathname !== "/0") {
     throw new Error(`Unsupported Redis database path: ${url.pathname}`);
   }
 
+  const username = url.username.length > 0 ? decodeRedisUrlComponent(url.username) : "";
+  const password = url.password.length > 0 ? decodeRedisUrlComponent(url.password) : "";
+
+  if (username.length > 0 && password.length === 0) {
+    throw new Error("Redis username requires a password.");
+  }
+
   return {
+    authArguments:
+      password.length === 0
+        ? null
+        : username.length === 0
+          ? ["AUTH", password]
+          : ["AUTH", username, password],
     host: url.hostname,
     port: Number.parseInt(url.port || "6379", 10),
   };
@@ -134,44 +153,85 @@ export async function sendRedisCommand(
   argumentsList: ReadonlyArray<string>,
   timeoutMs = 1000,
 ): Promise<RedisReply> {
-  const {host, port} = readRedisConnection(redisUrl);
+  const {authArguments, host, port} = readRedisConnection(redisUrl);
   const command = encodeRedisCommand(argumentsList);
 
   return await new Promise<RedisReply>((resolve, reject) => {
     const socket = net.createConnection({host, port});
     let responseBuffer = Buffer.alloc(0);
+    let settled = false;
+    let stage: "auth" | "command" = authArguments ? "auth" : "command";
+
+    const settleError = (error: Error): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      reject(error);
+    };
+
+    const settleReply = (reply: RedisReply): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      socket.end();
+      resolve(reply);
+    };
+
+    const processReplies = (): void => {
+      while (true) {
+        const parsedReply = parseRedisReply(responseBuffer);
+
+        if (!parsedReply) {
+          return;
+        }
+
+        responseBuffer = responseBuffer.subarray(parsedReply.bytesConsumed);
+
+        if (parsedReply.reply.kind === "error") {
+          settleError(new Error(`Redis command failed: ${parsedReply.reply.value}`));
+          return;
+        }
+
+        if (stage === "auth") {
+          if (parsedReply.reply.kind !== "simple_string" || parsedReply.reply.value !== "OK") {
+            settleError(
+              new Error(`Unexpected Redis AUTH response: ${JSON.stringify(parsedReply.reply)}`),
+            );
+            return;
+          }
+
+          stage = "command";
+          socket.write(command);
+          continue;
+        }
+
+        settleReply(parsedReply.reply);
+        return;
+      }
+    };
 
     const timeout = setTimeout(() => {
-      socket.destroy();
-      reject(new Error(`Timed out connecting to Redis at ${host}:${port}`));
+      settleError(new Error(`Timed out connecting to Redis at ${host}:${port}`));
     }, timeoutMs);
 
     socket.once("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      settleError(error);
     });
 
     socket.on("data", (chunk: Buffer) => {
       responseBuffer = Buffer.concat([responseBuffer, chunk]);
-      const parsedReply = parseRedisReply(responseBuffer);
-
-      if (!parsedReply) {
-        return;
-      }
-
-      clearTimeout(timeout);
-      socket.end();
-
-      if (parsedReply.reply.kind === "error") {
-        reject(new Error(`Redis command failed: ${parsedReply.reply.value}`));
-        return;
-      }
-
-      resolve(parsedReply.reply);
+      processReplies();
     });
 
     socket.once("connect", () => {
-      socket.write(command);
+      socket.write(authArguments ? encodeRedisCommand(authArguments) : command);
     });
   });
 }
