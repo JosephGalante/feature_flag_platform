@@ -1,6 +1,7 @@
 import {environments, flagEnvironmentConfigs} from "@shared/database";
 import {asc, eq, sql} from "drizzle-orm";
 import {readEnvironmentProjection} from "../../api/src/lib/redis-projections";
+import {rebuildEnvironmentProjection} from "../../api/src/projections/rebuild-environment-projection";
 import type {WorkerDatabase} from "./lib/database";
 
 type EnvironmentProjectionVersionRow = {
@@ -8,11 +9,15 @@ type EnvironmentProjectionVersionRow = {
   postgresProjectionVersion: number;
 };
 
-type ReconciliationDependencies = {
+type ReconciliationScanDependencies = {
   listEnvironmentProjectionVersions: (
     db: WorkerDatabase,
   ) => Promise<EnvironmentProjectionVersionRow[]>;
   readProjection: typeof readEnvironmentProjection;
+};
+
+type ReconciliationRepairDependencies = ReconciliationScanDependencies & {
+  rebuildProjection: typeof rebuildEnvironmentProjection;
 };
 
 export type EnvironmentProjectionHealth = {
@@ -22,9 +27,30 @@ export type EnvironmentProjectionHealth = {
   status: "fresh" | "missing" | "stale";
 };
 
-const defaultDependencies: ReconciliationDependencies = {
+type EnvironmentProjectionNeedingRepair = EnvironmentProjectionHealth & {
+  status: "missing" | "stale";
+};
+
+export type RepairedEnvironmentProjection = {
+  environmentId: string;
+  repairedProjectionVersion: number;
+  previousStatus: "missing" | "stale";
+};
+
+export type ReconciliationRepairResult = {
+  failedEnvironmentIds: string[];
+  repairedEnvironments: RepairedEnvironmentProjection[];
+  skippedCount: number;
+};
+
+const defaultScanDependencies: ReconciliationScanDependencies = {
   listEnvironmentProjectionVersions,
   readProjection: readEnvironmentProjection,
+};
+
+const defaultRepairDependencies: ReconciliationRepairDependencies = {
+  ...defaultScanDependencies,
+  rebuildProjection: rebuildEnvironmentProjection,
 };
 
 export async function listEnvironmentProjectionVersions(
@@ -55,7 +81,7 @@ export function classifyEnvironmentProjectionHealth(input: {
 export async function scanEnvironmentProjectionHealth(
   db: WorkerDatabase,
   redisUrl: string,
-  dependencies: ReconciliationDependencies = defaultDependencies,
+  dependencies: ReconciliationScanDependencies = defaultScanDependencies,
 ): Promise<EnvironmentProjectionHealth[]> {
   const environments = await dependencies.listEnvironmentProjectionVersions(db);
   const results: EnvironmentProjectionHealth[] = [];
@@ -80,6 +106,51 @@ export async function scanEnvironmentProjectionHealth(
 
 export function filterEnvironmentsNeedingRepair(
   environments: ReadonlyArray<EnvironmentProjectionHealth>,
-): EnvironmentProjectionHealth[] {
-  return environments.filter((environment) => environment.status !== "fresh");
+): EnvironmentProjectionNeedingRepair[] {
+  return environments.filter(
+    (environment): environment is EnvironmentProjectionNeedingRepair =>
+      environment.status !== "fresh",
+  );
+}
+
+export async function repairEnvironmentProjectionDrift(
+  db: WorkerDatabase,
+  redisUrl: string,
+  generatedAt: Date = new Date(),
+  dependencies: ReconciliationRepairDependencies = defaultRepairDependencies,
+): Promise<ReconciliationRepairResult> {
+  const environments = await scanEnvironmentProjectionHealth(db, redisUrl, dependencies);
+  const environmentsNeedingRepair = filterEnvironmentsNeedingRepair(environments);
+  const repairedEnvironments: RepairedEnvironmentProjection[] = [];
+  const failedEnvironmentIds: string[] = [];
+
+  for (const environment of environmentsNeedingRepair) {
+    try {
+      const rebuildResult = await dependencies.rebuildProjection(
+        db,
+        redisUrl,
+        environment.environmentId,
+        generatedAt,
+      );
+
+      if (!rebuildResult) {
+        failedEnvironmentIds.push(environment.environmentId);
+        continue;
+      }
+
+      repairedEnvironments.push({
+        environmentId: environment.environmentId,
+        previousStatus: environment.status,
+        repairedProjectionVersion: rebuildResult.projection.projectionVersion,
+      });
+    } catch {
+      failedEnvironmentIds.push(environment.environmentId);
+    }
+  }
+
+  return {
+    failedEnvironmentIds,
+    repairedEnvironments,
+    skippedCount: environments.length - environmentsNeedingRepair.length,
+  };
 }
