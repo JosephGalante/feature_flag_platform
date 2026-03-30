@@ -5,9 +5,11 @@ import {
 } from "@/app/actions";
 import {
   type AdminFlagRule,
+  type AdminPreviewEvaluationResult,
   SESSION_COOKIE_NAME,
   getCurrentAdmin,
   getFlagDetail,
+  previewFlagForEnvironment,
 } from "@/lib/admin-api";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
@@ -56,6 +58,31 @@ function buildConsoleHref(input: {
   const queryString = query.toString();
 
   return `/console${queryString.length > 0 ? `?${queryString}` : ""}`;
+}
+
+function buildFlagDetailHref(input: {
+  environmentId: string | null;
+  flagId: string;
+  organizationId: string | null;
+  projectId: string | null;
+}): string {
+  const query = new URLSearchParams();
+
+  if (input.organizationId) {
+    query.set("organizationId", input.organizationId);
+  }
+
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+
+  if (input.environmentId) {
+    query.set("environmentId", input.environmentId);
+  }
+
+  const queryString = query.toString();
+
+  return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
 }
 
 function formatJson(value: unknown): string {
@@ -160,6 +187,49 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
   }
 }
 
+function parsePreviewContext(
+  value: string | null,
+): {context: Record<string, string>} | {error: "invalid_preview_context" | "invalid_preview_json"} {
+  if (!value || value.trim().length === 0) {
+    return {context: {}};
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return {error: "invalid_preview_context"};
+    }
+
+    const contextEntries = Object.entries(parsed);
+
+    if (!contextEntries.every(([, entryValue]) => typeof entryValue === "string")) {
+      return {error: "invalid_preview_context"};
+    }
+
+    return {
+      context: Object.fromEntries(contextEntries) as Record<string, string>,
+    };
+  } catch {
+    return {error: "invalid_preview_json"};
+  }
+}
+
+function readPreviewErrorMessage(value: string): string {
+  switch (value) {
+    case "invalid_preview_json":
+      return "Preview context must be valid JSON.";
+    case "invalid_preview_context":
+      return "Preview context must be a JSON object with string values.";
+    case "invalid_preview_environment":
+      return "Choose a valid environment for the preview.";
+    case "PROJECTION_NOT_READY":
+      return "Redis does not have a projection for that environment yet.";
+    default:
+      return "Preview evaluation failed.";
+  }
+}
+
 export default async function FlagDetailPage({params, searchParams}: FlagDetailPageProps) {
   const [{flagId}, query] = await Promise.all([params, searchParams]);
   const resolvedQuery = query ?? {};
@@ -183,8 +253,54 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
     organizationId: readParam(resolvedQuery.organizationId),
     projectId: readParam(resolvedQuery.projectId),
   });
+  const previewResetHref = buildFlagDetailHref({
+    environmentId: selectedEnvironmentId,
+    flagId,
+    organizationId: readParam(resolvedQuery.organizationId),
+    projectId: readParam(resolvedQuery.projectId),
+  });
   const noticeMessage = readNoticeMessage(resolvedQuery.notice);
   const errorMessage = readErrorMessage(resolvedQuery.error);
+  const previewRequested = readParam(resolvedQuery.preview) === "1";
+  const previewEnvironmentId =
+    readParam(resolvedQuery.previewEnvironmentId) ??
+    selectedEnvironmentId ??
+    detail.environments[0]?.environment.id ??
+    null;
+  const previewContextInput = readParam(resolvedQuery.previewContextJson) ?? "";
+  let previewResult: AdminPreviewEvaluationResult | null = null;
+  let previewErrorMessage: string | null = null;
+
+  if (previewRequested) {
+    const previewEnvironmentExists = detail.environments.some(
+      (environmentDetail) => environmentDetail.environment.id === previewEnvironmentId,
+    );
+
+    if (!previewEnvironmentId || !previewEnvironmentExists) {
+      previewErrorMessage = readPreviewErrorMessage("invalid_preview_environment");
+    } else {
+      const parsedContext = parsePreviewContext(previewContextInput);
+
+      if ("error" in parsedContext) {
+        previewErrorMessage = readPreviewErrorMessage(parsedContext.error);
+      } else {
+        try {
+          previewResult = await previewFlagForEnvironment(
+            flagId,
+            {
+              context: parsedContext.context,
+              environmentId: previewEnvironmentId,
+            },
+            sessionCookie,
+          );
+        } catch (error) {
+          previewErrorMessage = readPreviewErrorMessage(
+            error instanceof Error ? error.message : "PREVIEW_FAILED",
+          );
+        }
+      }
+    }
+  }
 
   return (
     <main className="shell">
@@ -567,6 +683,136 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
             })}
           </div>
         </article>
+      </section>
+
+      <section className="panel detail-panel preview-panel">
+        <div className="table-header">
+          <div>
+            <p className="eyebrow">Phase 5</p>
+            <h2>Preview evaluator</h2>
+          </div>
+        </div>
+
+        <div className="preview-grid">
+          <section className="detail-block">
+            <div className="detail-block-header">
+              <div>
+                <h3>Test a sample context</h3>
+                <p>
+                  Submit a JSON object with string values. Blank input previews the flag with an
+                  empty context.
+                </p>
+              </div>
+            </div>
+
+            <form className="preview-form" method="GET">
+              <input
+                name="organizationId"
+                type="hidden"
+                value={readParam(resolvedQuery.organizationId) ?? ""}
+              />
+              <input
+                name="projectId"
+                type="hidden"
+                value={readParam(resolvedQuery.projectId) ?? ""}
+              />
+              <input name="environmentId" type="hidden" value={selectedEnvironmentId ?? ""} />
+              <input name="preview" type="hidden" value="1" />
+
+              <label className="context-field">
+                <span>Preview environment</span>
+                <select defaultValue={previewEnvironmentId ?? ""} name="previewEnvironmentId">
+                  {detail.environments.map((environmentDetail) => (
+                    <option
+                      key={environmentDetail.environment.id}
+                      value={environmentDetail.environment.id}
+                    >
+                      {environmentDetail.environment.name} ({environmentDetail.environment.key})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="context-field">
+                <span>Context JSON</span>
+                <textarea
+                  className="preview-textarea"
+                  defaultValue={previewContextInput}
+                  name="previewContextJson"
+                  placeholder={'{\n  "userId": "user_123",\n  "email": "alice@example.com"\n}'}
+                  rows={8}
+                />
+              </label>
+
+              <div className="preview-actions">
+                <button className="primary-button" type="submit">
+                  Run preview
+                </button>
+                {previewRequested ? (
+                  <Link className="table-link-button" href={previewResetHref}>
+                    Clear preview
+                  </Link>
+                ) : null}
+              </div>
+            </form>
+          </section>
+
+          <section className="detail-block">
+            <div className="detail-block-header">
+              <div>
+                <h3>Result</h3>
+                <p>
+                  Reason, matched rule, and projection version come from the same Redis-backed
+                  evaluator as the admin preview API.
+                </p>
+              </div>
+            </div>
+
+            {previewErrorMessage ? (
+              <p className="detail-feedback detail-feedback-error preview-feedback">
+                {previewErrorMessage}
+              </p>
+            ) : null}
+
+            {previewResult ? (
+              <div className="preview-result-stack">
+                <div className="preview-summary-grid">
+                  <article className="preview-summary-card">
+                    <span>Variant</span>
+                    <strong>{previewResult.variantKey ?? "None"}</strong>
+                  </article>
+                  <article className="preview-summary-card">
+                    <span>Reason</span>
+                    <strong>{previewResult.reason}</strong>
+                  </article>
+                  <article className="preview-summary-card">
+                    <span>Projection</span>
+                    <strong>
+                      {previewResult.projectionVersion !== null
+                        ? `v${previewResult.projectionVersion}`
+                        : "None"}
+                    </strong>
+                  </article>
+                </div>
+
+                <p className="detail-inline-meta">
+                  Matched rule: <code>{previewResult.matchedRuleId ?? "No matching rule"}</code>
+                </p>
+
+                <div>
+                  <p className="eyebrow">Resolved value</p>
+                  <pre className="json-block">{formatJson(previewResult.value)}</pre>
+                </div>
+              </div>
+            ) : (
+              <p className="empty-inline">
+                {previewRequested
+                  ? "No preview result is available."
+                  : "Run a preview to see the explainable evaluation output for this flag."}
+              </p>
+            )}
+          </section>
+        </div>
       </section>
     </main>
   );

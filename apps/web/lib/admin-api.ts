@@ -100,6 +100,15 @@ type AdminFlagDetail = {
   variants: AdminFlagVariant[];
 };
 
+export type AdminPreviewEvaluationResult = {
+  flagKey: string;
+  matchedRuleId: string | null;
+  projectionVersion: number | null;
+  reason: "DEFAULT" | "DISABLED" | "FLAG_NOT_FOUND" | "INVALID_CONTEXT" | "RULE_MATCH";
+  value: unknown;
+  variantKey: string | null;
+};
+
 type AdminApiKeySummary = {
   createdAt: string;
   environmentId: string;
@@ -215,6 +224,11 @@ type UpdateFlagMetadataResponse = {
   flag: AdminFlagSummary;
 };
 
+type PreviewFlagErrorResponse = {
+  error: string;
+  message?: string;
+};
+
 type ApiKeysResponse = {
   apiKeys: AdminApiKeySummary[];
   environment: AdminEnvironment & {organizationId: string};
@@ -253,6 +267,16 @@ async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
     data,
     status: response.status,
   };
+}
+
+function isErrorResponse(value: unknown): value is PreviewFlagErrorResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "error" in value &&
+    typeof value.error === "string" &&
+    (!("message" in value) || typeof value.message === "string")
+  );
 }
 
 async function apiFetch<T>(
@@ -499,6 +523,39 @@ export async function replaceFlagConfiguration(
   }
 
   return response.data;
+}
+
+export async function previewFlagForEnvironment(
+  flagId: string,
+  input: {
+    context: Record<string, string>;
+    environmentId: string;
+  },
+  sessionCookie?: string,
+): Promise<AdminPreviewEvaluationResult> {
+  const response = await apiFetch<AdminPreviewEvaluationResult | PreviewFlagErrorResponse>(
+    `/api/admin/flags/${flagId}/preview`,
+    {
+      init: {
+        body: JSON.stringify(input),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status === 200 && response.data && !isErrorResponse(response.data)) {
+    return response.data;
+  }
+
+  if (isErrorResponse(response.data)) {
+    throw new Error(response.data.error);
+  }
+
+  throw new Error("PREVIEW_FAILED");
 }
 
 export async function getApiKeysForEnvironment(
