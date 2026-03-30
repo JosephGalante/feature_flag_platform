@@ -36,14 +36,63 @@ function readStringEntries(formData: FormData, key: string): string[] {
   return formData.getAll(key).map((value) => (typeof value === "string" ? value.trim() : ""));
 }
 
-function buildFlagDetailHref(input: {
+type ConsoleQueryInput = {
   environmentId: string | null;
   error?: string;
-  flagId: string;
   notice?: string;
   organizationId: string | null;
   projectId: string | null;
-}): string {
+};
+
+type ConsoleRouteContext = {
+  environmentId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
+};
+
+type FlagRouteContext = ConsoleRouteContext & {
+  flagId: string;
+};
+
+type RequiredEnvironmentRouteContext = {
+  environmentId: string;
+  organizationId: string | null;
+  projectId: string | null;
+};
+
+type RequiredProjectRouteContext = ConsoleRouteContext & {
+  projectId: string;
+};
+
+type RequiredFlagEnvironmentRouteContext = {
+  environmentId: string;
+  flagId: string;
+  organizationId: string | null;
+  projectId: string | null;
+};
+
+type PercentageRolloutRuleDraft = {
+  rolloutPercentage: number;
+  ruleType: "percentage_rollout";
+  variantKey: string;
+};
+
+type AttributeMatchRuleDraft = {
+  attributeKey: string;
+  comparisonValue: string | string[];
+  operator: "equals" | "in";
+  ruleType: "attribute_match";
+  variantKey: string;
+};
+
+type RuleReadResult<T, E extends string> = {rules: T[]} | {error: E};
+
+type ReplaceFlagConfigurationPayload = Parameters<typeof replaceFlagConfiguration>[1];
+type ExistingFlagDetail = NonNullable<Awaited<ReturnType<typeof getFlagDetail>>>;
+type ReplacementEnvironmentInput = ReplaceFlagConfigurationPayload["environments"][number];
+type ReplacementRuleInput = ReplacementEnvironmentInput["rules"][number];
+
+function buildConsoleQuerySuffix(input: ConsoleQueryInput): string {
   const query = new URLSearchParams();
 
   if (input.organizationId) {
@@ -68,7 +117,18 @@ function buildFlagDetailHref(input: {
 
   const queryString = query.toString();
 
-  return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
+  return queryString.length > 0 ? `?${queryString}` : "";
+}
+
+function buildFlagDetailHref(input: {
+  environmentId: string | null;
+  error?: string;
+  flagId: string;
+  notice?: string;
+  organizationId: string | null;
+  projectId: string | null;
+}): string {
+  return `/console/flags/${input.flagId}${buildConsoleQuerySuffix(input)}`;
 }
 
 function buildApiKeysHref(input: {
@@ -78,31 +138,7 @@ function buildApiKeysHref(input: {
   organizationId: string | null;
   projectId: string | null;
 }): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  if (input.notice) {
-    query.set("notice", input.notice);
-  }
-
-  if (input.error) {
-    query.set("error", input.error);
-  }
-
-  const queryString = query.toString();
-
-  return `/console/api-keys${queryString.length > 0 ? `?${queryString}` : ""}`;
+  return `/console/api-keys${buildConsoleQuerySuffix(input)}`;
 }
 
 function buildConsoleHref(input: {
@@ -112,34 +148,64 @@ function buildConsoleHref(input: {
   organizationId: string | null;
   projectId: string | null;
 }): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  if (input.notice) {
-    query.set("notice", input.notice);
-  }
-
-  if (input.error) {
-    query.set("error", input.error);
-  }
-
-  const queryString = query.toString();
-
-  return `/console${queryString.length > 0 ? `?${queryString}` : ""}`;
+  return `/console${buildConsoleQuerySuffix(input)}`;
 }
 
-function toConfigurationRuleInput(rule: AdminFlagRule) {
+function readConsoleRouteContext(formData: FormData): ConsoleRouteContext {
+  return {
+    environmentId: readOptionalField(formData, "environmentId"),
+    organizationId: readOptionalField(formData, "organizationId"),
+    projectId: readOptionalField(formData, "projectId"),
+  };
+}
+
+function readProjectRouteContextFields(formData: FormData): RequiredProjectRouteContext {
+  return {
+    ...readConsoleRouteContext(formData),
+    projectId: readRequiredField(formData, "projectId"),
+  };
+}
+
+function readEnvironmentRouteContextFields(formData: FormData): RequiredEnvironmentRouteContext {
+  const {organizationId, projectId} = readConsoleRouteContext(formData);
+  return {
+    environmentId: readRequiredField(formData, "environmentId"),
+    organizationId,
+    projectId,
+  };
+}
+
+function readFlagRouteContextFields(formData: FormData): FlagRouteContext {
+  return {
+    ...readConsoleRouteContext(formData),
+    flagId: readRequiredField(formData, "flagId"),
+  };
+}
+
+function readFlagEnvironmentRouteContextFields(
+  formData: FormData,
+): RequiredFlagEnvironmentRouteContext {
+  const {organizationId, projectId} = readConsoleRouteContext(formData);
+  return {
+    environmentId: readRequiredField(formData, "environmentId"),
+    flagId: readRequiredField(formData, "flagId"),
+    organizationId,
+    projectId,
+  };
+}
+
+async function requireSessionCookie(): Promise<string> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
+  return sessionCookie;
+}
+
+function toConfigurationRuleInput(rule: AdminFlagRule): ReplacementRuleInput {
   if (rule.ruleType === "attribute_match") {
     if (typeof rule.attributeKey !== "string") {
       throw new Error("Attribute match rule is missing attributeKey.");
@@ -162,8 +228,8 @@ function toConfigurationRuleInput(rule: AdminFlagRule) {
     return {
       attributeKey: rule.attributeKey,
       comparisonValue: rule.comparisonValue,
-      operator: rule.operator as "equals" | "in",
-      ruleType: "attribute_match" as const,
+      operator: rule.operator,
+      ruleType: "attribute_match",
       sortOrder: rule.sortOrder,
       variantKey: rule.variantKey,
     };
@@ -176,7 +242,7 @@ function toConfigurationRuleInput(rule: AdminFlagRule) {
 
     return {
       rolloutPercentage: rule.rolloutPercentage,
-      ruleType: "percentage_rollout" as const,
+      ruleType: "percentage_rollout",
       sortOrder: rule.sortOrder,
       variantKey: rule.variantKey,
     };
@@ -185,22 +251,12 @@ function toConfigurationRuleInput(rule: AdminFlagRule) {
   throw new Error(`Unsupported rule type '${rule.ruleType}'.`);
 }
 
-function readPercentageRolloutRules(formData: FormData):
-  | {
-      rules: Array<{
-        rolloutPercentage: number;
-        ruleType: "percentage_rollout";
-        variantKey: string;
-      }>;
-    }
-  | {error: "invalid_rollout_rule"} {
+function readPercentageRolloutRules(
+  formData: FormData,
+): RuleReadResult<PercentageRolloutRuleDraft, "invalid_rollout_rule"> {
   const percentages = readStringEntries(formData, "rolloutPercentage");
   const variantKeys = readStringEntries(formData, "rolloutVariantKey");
-  const rules: Array<{
-    rolloutPercentage: number;
-    ruleType: "percentage_rollout";
-    variantKey: string;
-  }> = [];
+  const rules: PercentageRolloutRuleDraft[] = [];
   const entryCount = Math.max(percentages.length, variantKeys.length);
 
   for (let index = 0; index < entryCount; index += 1) {
@@ -231,28 +287,14 @@ function readPercentageRolloutRules(formData: FormData):
   return {rules};
 }
 
-function readAttributeMatchRules(formData: FormData):
-  | {
-      rules: Array<{
-        attributeKey: string;
-        comparisonValue: string | string[];
-        operator: "equals" | "in";
-        ruleType: "attribute_match";
-        variantKey: string;
-      }>;
-    }
-  | {error: "invalid_attribute_rule"} {
+function readAttributeMatchRules(
+  formData: FormData,
+): RuleReadResult<AttributeMatchRuleDraft, "invalid_attribute_rule"> {
   const attributeKeys = readStringEntries(formData, "attributeKey");
   const operators = readStringEntries(formData, "attributeOperator");
   const comparisonValues = readStringEntries(formData, "attributeComparisonValue");
   const variantKeys = readStringEntries(formData, "attributeVariantKey");
-  const rules: Array<{
-    attributeKey: string;
-    comparisonValue: string | string[];
-    operator: "equals" | "in";
-    ruleType: "attribute_match";
-    variantKey: string;
-  }> = [];
+  const rules: AttributeMatchRuleDraft[] = [];
   const entryCount = Math.max(
     attributeKeys.length,
     operators.length,
@@ -303,6 +345,84 @@ function readAttributeMatchRules(formData: FormData):
   return {rules};
 }
 
+function hasKnownVariantKeys(
+  variantKeys: Set<string>,
+  rules: Array<{variantKey: string}>,
+): boolean {
+  return rules.every((rule) => variantKeys.has(rule.variantKey));
+}
+
+function buildSortedReplacementRules(input: {
+  attributeRules: AttributeMatchRuleDraft[];
+  rolloutRules: PercentageRolloutRuleDraft[];
+}): ReplacementRuleInput[] {
+  return [
+    ...input.attributeRules.map((rule, index) => ({
+      ...rule,
+      sortOrder: index + 1,
+    })),
+    ...input.rolloutRules.map((rule, index) => ({
+      ...rule,
+      sortOrder: input.attributeRules.length + index + 1,
+    })),
+  ];
+}
+
+function buildReplacementEnvironmentInput(input: {
+  attributeRules: AttributeMatchRuleDraft[];
+  defaultVariantKey: string;
+  enabled: boolean;
+  environmentDetail: ExistingFlagDetail["environments"][number];
+  environmentId: string;
+  rolloutRules: PercentageRolloutRuleDraft[];
+}): ReplacementEnvironmentInput {
+  if (input.environmentDetail.environment.id !== input.environmentId) {
+    return {
+      defaultVariantKey: input.environmentDetail.config.defaultVariantKey,
+      enabled: input.environmentDetail.config.enabled,
+      environmentId: input.environmentDetail.environment.id,
+      rules: input.environmentDetail.rules.map(toConfigurationRuleInput),
+    };
+  }
+
+  return {
+    defaultVariantKey: input.defaultVariantKey,
+    enabled: input.enabled,
+    environmentId: input.environmentDetail.environment.id,
+    rules: buildSortedReplacementRules({
+      attributeRules: input.attributeRules,
+      rolloutRules: input.rolloutRules,
+    }),
+  };
+}
+
+function buildReplacementConfigurationPayload(input: {
+  attributeRules: AttributeMatchRuleDraft[];
+  currentDetail: ExistingFlagDetail;
+  defaultVariantKey: string;
+  enabled: boolean;
+  environmentId: string;
+  rolloutRules: PercentageRolloutRuleDraft[];
+}): ReplaceFlagConfigurationPayload {
+  return {
+    environments: input.currentDetail.environments.map((environmentDetail) =>
+      buildReplacementEnvironmentInput({
+        attributeRules: input.attributeRules,
+        defaultVariantKey: input.defaultVariantKey,
+        enabled: input.enabled,
+        environmentDetail,
+        environmentId: input.environmentId,
+        rolloutRules: input.rolloutRules,
+      }),
+    ),
+    variants: input.currentDetail.variants.map((variant) => ({
+      description: variant.description,
+      key: variant.key,
+      value: variant.value,
+    })),
+  };
+}
+
 export async function loginAction(formData: FormData): Promise<void> {
   const email = readEmail(formData);
 
@@ -348,9 +468,7 @@ export async function logoutAction(): Promise<void> {
 }
 
 export async function createFlagAction(formData: FormData): Promise<void> {
-  const projectId = readRequiredField(formData, "projectId");
-  const organizationId = readOptionalField(formData, "organizationId");
-  const environmentId = readOptionalField(formData, "environmentId");
+  const {environmentId, organizationId, projectId} = readProjectRouteContextFields(formData);
   const key = readRequiredField(formData, "key");
   const name = readRequiredField(formData, "name");
   const description = readOptionalField(formData, "description");
@@ -369,12 +487,7 @@ export async function createFlagAction(formData: FormData): Promise<void> {
     );
   }
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionCookie) {
-    redirect("/login");
-  }
+  const sessionCookie = await requireSessionCookie();
 
   const createdFlag = await createFlagForProject(
     projectId,
@@ -411,9 +524,7 @@ export async function createFlagAction(formData: FormData): Promise<void> {
 }
 
 export async function createApiKeyAction(formData: FormData): Promise<void> {
-  const environmentId = readRequiredField(formData, "environmentId");
-  const organizationId = readOptionalField(formData, "organizationId");
-  const projectId = readOptionalField(formData, "projectId");
+  const {environmentId, organizationId, projectId} = readEnvironmentRouteContextFields(formData);
   const name = readRequiredField(formData, "name");
 
   if (environmentId.length === 0 || name.length === 0) {
@@ -427,12 +538,8 @@ export async function createApiKeyAction(formData: FormData): Promise<void> {
     );
   }
 
+  const sessionCookie = await requireSessionCookie();
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionCookie) {
-    redirect("/login");
-  }
 
   const result = await createApiKeyForEnvironment(environmentId, name, sessionCookie).catch(() => {
     redirect(
@@ -471,9 +578,7 @@ export async function createApiKeyAction(formData: FormData): Promise<void> {
 
 export async function revokeApiKeyAction(formData: FormData): Promise<void> {
   const apiKeyId = readRequiredField(formData, "apiKeyId");
-  const environmentId = readRequiredField(formData, "environmentId");
-  const organizationId = readOptionalField(formData, "organizationId");
-  const projectId = readOptionalField(formData, "projectId");
+  const {environmentId, organizationId, projectId} = readEnvironmentRouteContextFields(formData);
 
   if (apiKeyId.length === 0 || environmentId.length === 0) {
     redirect(
@@ -486,12 +591,7 @@ export async function revokeApiKeyAction(formData: FormData): Promise<void> {
     );
   }
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionCookie) {
-    redirect("/login");
-  }
+  const sessionCookie = await requireSessionCookie();
 
   await revokeApiKeyById(apiKeyId, sessionCookie).catch(() => {
     redirect(
@@ -515,10 +615,7 @@ export async function revokeApiKeyAction(formData: FormData): Promise<void> {
 }
 
 export async function updateFlagMetadataAction(formData: FormData): Promise<void> {
-  const flagId = readRequiredField(formData, "flagId");
-  const environmentId = readOptionalField(formData, "environmentId");
-  const organizationId = readOptionalField(formData, "organizationId");
-  const projectId = readOptionalField(formData, "projectId");
+  const {environmentId, flagId, organizationId, projectId} = readFlagRouteContextFields(formData);
   const name = readRequiredField(formData, "name");
   const description = readOptionalField(formData, "description");
 
@@ -534,12 +631,7 @@ export async function updateFlagMetadataAction(formData: FormData): Promise<void
     );
   }
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionCookie) {
-    redirect("/login");
-  }
+  const sessionCookie = await requireSessionCookie();
 
   await updateFlagMetadataById(
     flagId,
@@ -572,10 +664,7 @@ export async function updateFlagMetadataAction(formData: FormData): Promise<void
 }
 
 export async function archiveFlagAction(formData: FormData): Promise<void> {
-  const flagId = readRequiredField(formData, "flagId");
-  const environmentId = readOptionalField(formData, "environmentId");
-  const organizationId = readOptionalField(formData, "organizationId");
-  const projectId = readOptionalField(formData, "projectId");
+  const {environmentId, flagId, organizationId, projectId} = readFlagRouteContextFields(formData);
 
   if (flagId.length === 0) {
     redirect(
@@ -588,12 +677,7 @@ export async function archiveFlagAction(formData: FormData): Promise<void> {
     );
   }
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionCookie) {
-    redirect("/login");
-  }
+  const sessionCookie = await requireSessionCookie();
 
   await archiveFlagById(flagId, sessionCookie).catch(() => {
     redirect(
@@ -619,9 +703,7 @@ export async function archiveFlagAction(formData: FormData): Promise<void> {
 }
 
 export async function dismissApiKeyFlashAction(formData: FormData): Promise<void> {
-  const environmentId = readOptionalField(formData, "environmentId");
-  const organizationId = readOptionalField(formData, "organizationId");
-  const projectId = readOptionalField(formData, "projectId");
+  const {environmentId, organizationId, projectId} = readConsoleRouteContext(formData);
   const cookieStore = await cookies();
 
   cookieStore.delete(API_KEY_FLASH_COOKIE_NAME);
@@ -636,12 +718,10 @@ export async function dismissApiKeyFlashAction(formData: FormData): Promise<void
 }
 
 export async function updateFlagEnvironmentAction(formData: FormData): Promise<void> {
-  const flagId = readRequiredField(formData, "flagId");
-  const environmentId = readRequiredField(formData, "environmentId");
+  const {environmentId, flagId, organizationId, projectId} =
+    readFlagEnvironmentRouteContextFields(formData);
   const defaultVariantKey = readRequiredField(formData, "defaultVariantKey");
   const enabled = readRequiredField(formData, "enabled") === "true";
-  const organizationId = readOptionalField(formData, "organizationId");
-  const projectId = readOptionalField(formData, "projectId");
   const attributeInput = readAttributeMatchRules(formData);
   const rolloutInput = readPercentageRolloutRules(formData);
 
@@ -681,12 +761,7 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
     );
   }
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionCookie) {
-    redirect("/login");
-  }
+  const sessionCookie = await requireSessionCookie();
 
   const currentDetail = await getFlagDetail(flagId, sessionCookie).catch(() => null);
 
@@ -702,23 +777,12 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
     );
   }
 
-  if (!currentDetail.variants.some((variant) => variant.key === defaultVariantKey)) {
-    redirect(
-      buildFlagDetailHref({
-        environmentId,
-        error: "invalid_variant",
-        flagId,
-        organizationId,
-        projectId,
-      }),
-    );
-  }
-
   const variantKeys = new Set(currentDetail.variants.map((variant) => variant.key));
 
   if (
-    !rolloutInput.rules.every((rule) => variantKeys.has(rule.variantKey)) ||
-    !attributeInput.rules.every((rule) => variantKeys.has(rule.variantKey))
+    !variantKeys.has(defaultVariantKey) ||
+    !hasKnownVariantKeys(variantKeys, rolloutInput.rules) ||
+    !hasKnownVariantKeys(variantKeys, attributeInput.rules)
   ) {
     redirect(
       buildFlagDetailHref({
@@ -733,39 +797,14 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
 
   const result = await replaceFlagConfiguration(
     flagId,
-    {
-      environments: currentDetail.environments.map((environmentDetail) => {
-        if (environmentDetail.environment.id !== environmentId) {
-          return {
-            defaultVariantKey: environmentDetail.config.defaultVariantKey,
-            enabled: environmentDetail.config.enabled,
-            environmentId: environmentDetail.environment.id,
-            rules: environmentDetail.rules.map(toConfigurationRuleInput),
-          };
-        }
-
-        return {
-          defaultVariantKey,
-          enabled,
-          environmentId: environmentDetail.environment.id,
-          rules: [
-            ...attributeInput.rules.map((rule, index) => ({
-              ...rule,
-              sortOrder: index + 1,
-            })),
-            ...rolloutInput.rules.map((rule, index) => ({
-              ...rule,
-              sortOrder: attributeInput.rules.length + index + 1,
-            })),
-          ],
-        };
-      }),
-      variants: currentDetail.variants.map((variant) => ({
-        description: variant.description,
-        key: variant.key,
-        value: variant.value,
-      })),
-    },
+    buildReplacementConfigurationPayload({
+      attributeRules: attributeInput.rules,
+      currentDetail,
+      defaultVariantKey,
+      enabled,
+      environmentId,
+      rolloutRules: rolloutInput.rules,
+    }),
     sessionCookie,
   ).catch(() => {
     redirect(
