@@ -1,3 +1,4 @@
+import type {EvaluationContext} from "@feature-flag-platform/evaluation-core";
 import type {JsonValue} from "@shared/json";
 import type {FastifyInstance} from "fastify";
 import {z} from "zod";
@@ -13,9 +14,11 @@ import {
   replaceFlagConfiguration,
   updateFlagMetadata,
 } from "../admin/flags";
-import {findAuthorizedProject} from "../admin/service";
+import {findAuthorizedProject, listEnvironmentsForProject} from "../admin/service";
 import type {ApiConfig} from "../config";
 import type {ApiDatabase} from "../lib/database";
+import {readEnvironmentProjection} from "../lib/redis-projections";
+import {previewFlagEvaluation} from "../projections/preview-flag-evaluation";
 
 const projectParamsSchema = z.object({
   projectId: z.string().uuid(),
@@ -95,6 +98,11 @@ const configurationBodySchema = z.object({
       value: jsonValueSchema,
     }),
   ),
+});
+
+const previewBodySchema = z.object({
+  context: z.record(z.string()).default({}),
+  environmentId: z.string().uuid(),
 });
 
 function isKnownServiceError(
@@ -340,6 +348,69 @@ export async function registerAdminFlagRoutes(
     }
 
     return reply.send(detail);
+  });
+
+  app.post("/api/admin/flags/:flagId/preview", async (request, reply) => {
+    const admin = await requireAuthenticatedAdmin(request, reply, db, config);
+
+    if (!admin) {
+      return;
+    }
+
+    const parsedParams = flagParamsSchema.safeParse(request.params);
+    const parsedBody = previewBodySchema.safeParse(request.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send({
+        error: "INVALID_REQUEST",
+        issues: {
+          body: parsedBody.success ? undefined : parsedBody.error.flatten(),
+          params: parsedParams.success ? undefined : parsedParams.error.flatten(),
+        },
+      });
+    }
+
+    const access = await findAuthorizedFlagAccess(db, parsedParams.data.flagId, admin.user.id);
+
+    if (!access) {
+      return reply.code(404).send({
+        error: "FLAG_NOT_FOUND",
+        message: "Feature flag was not found for the current admin.",
+      });
+    }
+
+    const environments = await listEnvironmentsForProject(db, access.flag.projectId);
+    const hasEnvironment = environments.some(
+      (environment) => environment.id === parsedBody.data.environmentId,
+    );
+
+    if (!hasEnvironment) {
+      return reply.code(404).send({
+        error: "ENVIRONMENT_NOT_FOUND",
+        message: "Environment does not belong to the feature flag's project.",
+      });
+    }
+
+    const result = await previewFlagEvaluation(
+      {
+        readProjection: async (environmentId) =>
+          await readEnvironmentProjection(config.redisUrl, environmentId),
+      },
+      {
+        context: parsedBody.data.context satisfies EvaluationContext,
+        environmentId: parsedBody.data.environmentId,
+        flagKey: access.flag.key,
+      },
+    );
+
+    if (result.status === "projection_not_found") {
+      return reply.code(503).send({
+        error: "PROJECTION_NOT_READY",
+        message: "No Redis projection exists for that environment.",
+      });
+    }
+
+    return reply.send(result.result);
   });
 
   app.patch("/api/admin/flags/:flagId", async (request, reply) => {
