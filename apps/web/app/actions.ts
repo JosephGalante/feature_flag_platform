@@ -26,6 +26,10 @@ function readOptionalField(formData: FormData, key: string): string | null {
   return value.length > 0 ? value : null;
 }
 
+function readStringEntries(formData: FormData, key: string): string[] {
+  return formData.getAll(key).map((value) => (typeof value === "string" ? value.trim() : ""));
+}
+
 function buildFlagDetailHref(input: {
   environmentId: string | null;
   error?: string;
@@ -107,6 +111,52 @@ function toConfigurationRuleInput(rule: AdminFlagRule) {
   throw new Error(`Unsupported rule type '${rule.ruleType}'.`);
 }
 
+function readPercentageRolloutRules(formData: FormData):
+  | {
+      rules: Array<{
+        rolloutPercentage: number;
+        ruleType: "percentage_rollout";
+        variantKey: string;
+      }>;
+    }
+  | {error: "invalid_rollout_rule"} {
+  const percentages = readStringEntries(formData, "rolloutPercentage");
+  const variantKeys = readStringEntries(formData, "rolloutVariantKey");
+  const rules: Array<{
+    rolloutPercentage: number;
+    ruleType: "percentage_rollout";
+    variantKey: string;
+  }> = [];
+  const entryCount = Math.max(percentages.length, variantKeys.length);
+
+  for (let index = 0; index < entryCount; index += 1) {
+    const percentageValue = percentages[index] ?? "";
+    const variantKey = variantKeys[index] ?? "";
+
+    if (percentageValue.length === 0 && variantKey.length === 0) {
+      continue;
+    }
+
+    if (percentageValue.length === 0 || variantKey.length === 0) {
+      return {error: "invalid_rollout_rule"};
+    }
+
+    const rolloutPercentage = Number(percentageValue);
+
+    if (!Number.isInteger(rolloutPercentage) || rolloutPercentage < 0 || rolloutPercentage > 100) {
+      return {error: "invalid_rollout_rule"};
+    }
+
+    rules.push({
+      rolloutPercentage,
+      ruleType: "percentage_rollout",
+      variantKey,
+    });
+  }
+
+  return {rules};
+}
+
 export async function loginAction(formData: FormData): Promise<void> {
   const email = readEmail(formData);
 
@@ -158,12 +208,25 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
   const enabled = readRequiredField(formData, "enabled") === "true";
   const organizationId = readOptionalField(formData, "organizationId");
   const projectId = readOptionalField(formData, "projectId");
+  const rolloutInput = readPercentageRolloutRules(formData);
 
   if (flagId.length === 0 || environmentId.length === 0 || defaultVariantKey.length === 0) {
     redirect(
       buildFlagDetailHref({
         environmentId: environmentId || null,
         error: "invalid_form",
+        flagId,
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
+  if ("error" in rolloutInput) {
+    redirect(
+      buildFlagDetailHref({
+        environmentId: environmentId || null,
+        error: rolloutInput.error,
         flagId,
         organizationId,
         projectId,
@@ -204,21 +267,54 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
     );
   }
 
+  const variantKeys = new Set(currentDetail.variants.map((variant) => variant.key));
+
+  if (!rolloutInput.rules.every((rule) => variantKeys.has(rule.variantKey))) {
+    redirect(
+      buildFlagDetailHref({
+        environmentId,
+        error: "invalid_variant",
+        flagId,
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
   const result = await replaceFlagConfiguration(
     flagId,
     {
-      environments: currentDetail.environments.map((environmentDetail) => ({
-        defaultVariantKey:
-          environmentDetail.environment.id === environmentId
-            ? defaultVariantKey
-            : environmentDetail.config.defaultVariantKey,
-        enabled:
-          environmentDetail.environment.id === environmentId
-            ? enabled
-            : environmentDetail.config.enabled,
-        environmentId: environmentDetail.environment.id,
-        rules: environmentDetail.rules.map(toConfigurationRuleInput),
-      })),
+      environments: currentDetail.environments.map((environmentDetail) => {
+        if (environmentDetail.environment.id !== environmentId) {
+          return {
+            defaultVariantKey: environmentDetail.config.defaultVariantKey,
+            enabled: environmentDetail.config.enabled,
+            environmentId: environmentDetail.environment.id,
+            rules: environmentDetail.rules.map(toConfigurationRuleInput),
+          };
+        }
+
+        const preservedAttributeRules = environmentDetail.rules
+          .filter((rule) => rule.ruleType === "attribute_match")
+          .map(toConfigurationRuleInput);
+        const highestSortOrder = preservedAttributeRules.reduce(
+          (maxSortOrder, rule) => Math.max(maxSortOrder, rule.sortOrder),
+          0,
+        );
+
+        return {
+          defaultVariantKey,
+          enabled,
+          environmentId: environmentDetail.environment.id,
+          rules: [
+            ...preservedAttributeRules,
+            ...rolloutInput.rules.map((rule, index) => ({
+              ...rule,
+              sortOrder: highestSortOrder + index + 1,
+            })),
+          ],
+        };
+      }),
       variants: currentDetail.variants.map((variant) => ({
         description: variant.description,
         key: variant.key,

@@ -333,6 +333,24 @@ th {
   gap: 0.9rem;
 }
 
+.rule-editor,
+.readonly-rules {
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+.rollout-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.rollout-row {
+  display: grid;
+  grid-template-columns: 0.7fr 1fr;
+  gap: 0.9rem;
+}
+
 .environment-save-button {
   justify-self: start;
 }
@@ -444,6 +462,10 @@ th {
   }
 
   .environment-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rollout-row {
     grid-template-columns: 1fr;
   }
 }
