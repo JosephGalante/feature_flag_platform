@@ -16,6 +16,7 @@ import {
   updateFlagMetadataById,
 } from "../lib/admin-api";
 import {API_KEY_FLASH_COOKIE_NAME, encodeApiKeyFlash} from "../lib/api-key-flash";
+import {buildApiKeysHref, buildConsoleHref, buildFlagDetailHref} from "../lib/console-hrefs";
 
 function readEmail(formData: FormData): string {
   const rawValue = formData.get("email");
@@ -35,14 +36,6 @@ function readOptionalField(formData: FormData, key: string): string | null {
 function readStringEntries(formData: FormData, key: string): string[] {
   return formData.getAll(key).map((value) => (typeof value === "string" ? value.trim() : ""));
 }
-
-type ConsoleQueryInput = {
-  environmentId: string | null;
-  error?: string;
-  notice?: string;
-  organizationId: string | null;
-  projectId: string | null;
-};
 
 type ConsoleRouteContext = {
   environmentId: string | null;
@@ -91,65 +84,6 @@ type ReplaceFlagConfigurationPayload = Parameters<typeof replaceFlagConfiguratio
 type ExistingFlagDetail = NonNullable<Awaited<ReturnType<typeof getFlagDetail>>>;
 type ReplacementEnvironmentInput = ReplaceFlagConfigurationPayload["environments"][number];
 type ReplacementRuleInput = ReplacementEnvironmentInput["rules"][number];
-
-function buildConsoleQuerySuffix(input: ConsoleQueryInput): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  if (input.notice) {
-    query.set("notice", input.notice);
-  }
-
-  if (input.error) {
-    query.set("error", input.error);
-  }
-
-  const queryString = query.toString();
-
-  return queryString.length > 0 ? `?${queryString}` : "";
-}
-
-function buildFlagDetailHref(input: {
-  environmentId: string | null;
-  error?: string;
-  flagId: string;
-  notice?: string;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  return `/console/flags/${input.flagId}${buildConsoleQuerySuffix(input)}`;
-}
-
-function buildApiKeysHref(input: {
-  environmentId: string | null;
-  error?: string;
-  notice?: string;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  return `/console/api-keys${buildConsoleQuerySuffix(input)}`;
-}
-
-function buildConsoleHref(input: {
-  environmentId: string | null;
-  error?: string;
-  notice?: string;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  return `/console${buildConsoleQuerySuffix(input)}`;
-}
 
 function readConsoleRouteContext(formData: FormData): ConsoleRouteContext {
   return {

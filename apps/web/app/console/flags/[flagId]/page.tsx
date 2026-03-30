@@ -1,234 +1,33 @@
 import {
-  archiveFlagAction,
-  updateFlagEnvironmentAction,
-  updateFlagMetadataAction,
-} from "@/app/actions";
-import {
-  type AdminFlagRule,
   type AdminPreviewEvaluationResult,
   SESSION_COOKIE_NAME,
   getCurrentAdmin,
   getFlagDetail,
   previewFlagForEnvironment,
 } from "@/lib/admin-api";
+import {buildConsoleHref, buildFlagDetailHref, readSearchParam} from "@/lib/console-hrefs";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
-import Link from "next/link";
 import {notFound, redirect} from "next/navigation";
+import {
+  FlagDetailHeader,
+  FlagEnvironmentsPanel,
+  FlagMetadataPanel,
+  FlagPreviewPanel,
+  FlagSummaryCards,
+  FlagVariantsPanel,
+} from "./flag-detail-sections";
+import {
+  parsePreviewContext,
+  readFlagDetailErrorMessage,
+  readFlagDetailNoticeMessage,
+  readPreviewErrorMessage,
+} from "./flag-detail-utils";
 
 type FlagDetailPageProps = {
   params: Promise<{flagId: string}>;
   searchParams?: Promise<SearchParams>;
 };
-
-function readParam(value: string | string[] | undefined): string | null {
-  if (typeof value === "string" && value.length > 0) {
-    return value;
-  }
-
-  return null;
-}
-
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function buildConsoleHref(input: {
-  environmentId: string | null;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
-function buildFlagDetailHref(input: {
-  environmentId: string | null;
-  flagId: string;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
-function formatJson(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
-
-function buildEditableRolloutSlots(rules: AdminFlagRule[]): Array<{
-  id: string;
-  rolloutPercentage: number | null;
-  variantKey: string;
-}> {
-  const rolloutRules = rules
-    .filter((rule) => rule.ruleType === "percentage_rollout")
-    .map((rule) => ({
-      id: rule.id,
-      rolloutPercentage: rule.rolloutPercentage,
-      variantKey: rule.variantKey,
-    }));
-
-  return [
-    ...rolloutRules,
-    {
-      id: "new-rollout-rule",
-      rolloutPercentage: null,
-      variantKey: "",
-    },
-  ];
-}
-
-function buildEditableAttributeSlots(rules: AdminFlagRule[]): Array<{
-  attributeKey: string;
-  comparisonValue: string;
-  id: string;
-  operator: "equals" | "in";
-  variantKey: string;
-}> {
-  const attributeRules = rules
-    .filter((rule) => rule.ruleType === "attribute_match")
-    .map((rule) => ({
-      attributeKey: rule.attributeKey ?? "",
-      comparisonValue: Array.isArray(rule.comparisonValue)
-        ? rule.comparisonValue.join(", ")
-        : typeof rule.comparisonValue === "string"
-          ? rule.comparisonValue
-          : "",
-      id: rule.id,
-      operator: rule.operator === "in" ? ("in" as const) : ("equals" as const),
-      variantKey: rule.variantKey,
-    }));
-
-  return [
-    ...attributeRules,
-    {
-      attributeKey: "",
-      comparisonValue: "",
-      id: "new-attribute-rule",
-      operator: "equals" as const,
-      variantKey: "",
-    },
-  ];
-}
-
-function readNoticeMessage(value: string | string[] | undefined): string | null {
-  switch (readParam(value)) {
-    case "flag_created":
-      return "Flag created with default variants and environment configurations.";
-    case "metadata_saved":
-      return "Flag metadata saved.";
-    case "flag_archived":
-      return "Flag archived.";
-    case "environment_saved":
-      return "Environment configuration saved.";
-    case "no_changes":
-      return "No configuration changes were detected.";
-    default:
-      return null;
-  }
-}
-
-function readErrorMessage(value: string | string[] | undefined): string | null {
-  switch (readParam(value)) {
-    case "flag_not_found":
-      return "The flag could not be reloaded before saving.";
-    case "invalid_metadata_form":
-      return "The submitted metadata form was incomplete.";
-    case "invalid_form":
-      return "The submitted environment update was incomplete.";
-    case "invalid_variant":
-      return "The selected default variant is not valid for this flag.";
-    case "invalid_attribute_rule":
-      return "Each attribute rule needs an attribute key, operator, comparison value, and variant.";
-    case "invalid_rollout_rule":
-      return "Each rollout rule needs a percentage, a variant, and a value from 0 to 100.";
-    case "metadata_save_failed":
-      return "The API rejected the metadata update.";
-    case "flag_archive_failed":
-      return "The API rejected the archive request.";
-    case "save_failed":
-      return "The API rejected the environment update.";
-    default:
-      return null;
-  }
-}
-
-function parsePreviewContext(
-  value: string | null,
-): {context: Record<string, string>} | {error: "invalid_preview_context" | "invalid_preview_json"} {
-  if (!value || value.trim().length === 0) {
-    return {context: {}};
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return {error: "invalid_preview_context"};
-    }
-
-    const contextEntries = Object.entries(parsed);
-
-    if (!contextEntries.every(([, entryValue]) => typeof entryValue === "string")) {
-      return {error: "invalid_preview_context"};
-    }
-
-    return {
-      context: Object.fromEntries(contextEntries) as Record<string, string>,
-    };
-  } catch {
-    return {error: "invalid_preview_json"};
-  }
-}
-
-function readPreviewErrorMessage(value: string): string {
-  switch (value) {
-    case "invalid_preview_json":
-      return "Preview context must be valid JSON.";
-    case "invalid_preview_context":
-      return "Preview context must be a JSON object with string values.";
-    case "invalid_preview_environment":
-      return "Choose a valid environment for the preview.";
-    case "PROJECTION_NOT_READY":
-      return "Redis does not have a projection for that environment yet.";
-    default:
-      return "Preview evaluation failed.";
-  }
-}
 
 export default async function FlagDetailPage({params, searchParams}: FlagDetailPageProps) {
   const [{flagId}, query] = await Promise.all([params, searchParams]);
@@ -247,27 +46,30 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
     notFound();
   }
 
-  const selectedEnvironmentId = readParam(resolvedQuery.environmentId);
-  const backHref = buildConsoleHref({
+  const organizationId = readSearchParam(resolvedQuery.organizationId);
+  const projectId = readSearchParam(resolvedQuery.projectId);
+  const selectedEnvironmentId = readSearchParam(resolvedQuery.environmentId);
+  const routeContext = {
     environmentId: selectedEnvironmentId,
-    organizationId: readParam(resolvedQuery.organizationId),
-    projectId: readParam(resolvedQuery.projectId),
+    organizationId,
+    projectId,
+  };
+  const backHref = buildConsoleHref({
+    ...routeContext,
   });
   const previewResetHref = buildFlagDetailHref({
-    environmentId: selectedEnvironmentId,
     flagId,
-    organizationId: readParam(resolvedQuery.organizationId),
-    projectId: readParam(resolvedQuery.projectId),
+    ...routeContext,
   });
-  const noticeMessage = readNoticeMessage(resolvedQuery.notice);
-  const errorMessage = readErrorMessage(resolvedQuery.error);
-  const previewRequested = readParam(resolvedQuery.preview) === "1";
+  const noticeMessage = readFlagDetailNoticeMessage(resolvedQuery.notice);
+  const errorMessage = readFlagDetailErrorMessage(resolvedQuery.error);
+  const previewRequested = readSearchParam(resolvedQuery.preview) === "1";
   const previewEnvironmentId =
-    readParam(resolvedQuery.previewEnvironmentId) ??
+    readSearchParam(resolvedQuery.previewEnvironmentId) ??
     selectedEnvironmentId ??
     detail.environments[0]?.environment.id ??
     null;
-  const previewContextInput = readParam(resolvedQuery.previewContextJson) ?? "";
+  const previewContextInput = readSearchParam(resolvedQuery.previewContextJson) ?? "";
   let previewResult: AdminPreviewEvaluationResult | null = null;
   let previewErrorMessage: string | null = null;
 
@@ -304,516 +106,39 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
 
   return (
     <main className="shell">
-      <section className="detail-header">
-        <div>
-          <p className="eyebrow">Phase 4 / Slice 5</p>
-          <h1>{detail.flag.name}</h1>
-          <p className="hero-copy">
-            Metadata, archive controls, variants, and environment settings are live from the admin
-            API on the same page.
-          </p>
-        </div>
-        <div className="detail-actions">
-          <Link className="secondary-button detail-back-link" href={backHref}>
-            Back to console
-          </Link>
-        </div>
-      </section>
-
-      {noticeMessage ? (
-        <p className="detail-feedback detail-feedback-success">{noticeMessage}</p>
-      ) : null}
-      {errorMessage ? (
-        <p className="detail-feedback detail-feedback-error">{errorMessage}</p>
-      ) : null}
-
-      <section className="summary-grid">
-        <article className="panel stat-card">
-          <p className="eyebrow">Key</p>
-          <strong>{detail.flag.key}</strong>
-          <span>{detail.flag.description ?? "No description yet."}</span>
-        </article>
-        <article className="panel stat-card">
-          <p className="eyebrow">Type</p>
-          <strong>{detail.flag.flagType}</strong>
-          <span>
-            <span className={`status-pill status-${detail.flag.status}`}>{detail.flag.status}</span>
-          </span>
-        </article>
-        <article className="panel stat-card">
-          <p className="eyebrow">Updated</p>
-          <strong>{formatTimestamp(detail.flag.updatedAt)}</strong>
-          <span>Created {formatTimestamp(detail.flag.createdAt)}</span>
-        </article>
-      </section>
-
-      <section className="panel detail-panel">
-        <div className="table-header">
-          <div>
-            <p className="eyebrow">Metadata</p>
-            <h2>Identity and lifecycle</h2>
-          </div>
-        </div>
-
-        <div className="detail-stack">
-          <section className="detail-block">
-            <div className="detail-block-header">
-              <div>
-                <h3>Edit flag metadata</h3>
-                <p>
-                  Update the display name and optional description without touching configuration.
-                </p>
-              </div>
-            </div>
-
-            <form action={updateFlagMetadataAction} className="metadata-form">
-              <input name="flagId" type="hidden" value={detail.flag.id} />
-              <input
-                name="organizationId"
-                type="hidden"
-                value={readParam(resolvedQuery.organizationId) ?? ""}
-              />
-              <input
-                name="projectId"
-                type="hidden"
-                value={readParam(resolvedQuery.projectId) ?? ""}
-              />
-              <input
-                name="environmentId"
-                type="hidden"
-                value={readParam(resolvedQuery.environmentId) ?? ""}
-              />
-
-              <div className="metadata-form-grid">
-                <label className="context-field">
-                  <span>Name</span>
-                  <input defaultValue={detail.flag.name} name="name" type="text" />
-                </label>
-
-                <label className="context-field">
-                  <span>Description</span>
-                  <input
-                    defaultValue={detail.flag.description ?? ""}
-                    name="description"
-                    placeholder="No description yet."
-                    type="text"
-                  />
-                </label>
-              </div>
-
-              <div className="metadata-form-actions">
-                <button className="primary-button create-button" type="submit">
-                  Save metadata
-                </button>
-              </div>
-            </form>
-          </section>
-
-          <section className="detail-block">
-            <div className="detail-block-header">
-              <div>
-                <h3>Archive flag</h3>
-                <p>
-                  Archiving keeps the flag visible for audit history but marks it inactive across
-                  the control plane.
-                </p>
-              </div>
-            </div>
-
-            <div className="metadata-archive-row">
-              <p className="detail-inline-meta">
-                Current status{" "}
-                <span className={`status-pill status-${detail.flag.status}`}>
-                  {detail.flag.status}
-                </span>
-              </p>
-
-              {detail.flag.status === "archived" ? (
-                <span className="table-link-button is-disabled">Already archived</span>
-              ) : (
-                <form action={archiveFlagAction}>
-                  <input name="flagId" type="hidden" value={detail.flag.id} />
-                  <input
-                    name="organizationId"
-                    type="hidden"
-                    value={readParam(resolvedQuery.organizationId) ?? ""}
-                  />
-                  <input
-                    name="projectId"
-                    type="hidden"
-                    value={readParam(resolvedQuery.projectId) ?? ""}
-                  />
-                  <input
-                    name="environmentId"
-                    type="hidden"
-                    value={readParam(resolvedQuery.environmentId) ?? ""}
-                  />
-                  <button className="table-link-button danger-button" type="submit">
-                    Archive flag
-                  </button>
-                </form>
-              )}
-            </div>
-          </section>
-        </div>
-      </section>
+      <FlagDetailHeader
+        backHref={backHref}
+        errorMessage={errorMessage}
+        name={detail.flag.name}
+        noticeMessage={noticeMessage}
+      />
+      <FlagSummaryCards flag={detail.flag} />
+      <FlagMetadataPanel flag={detail.flag} routeContext={routeContext} />
 
       <section className="detail-grid">
-        <article className="panel detail-panel">
-          <div className="table-header">
-            <div>
-              <p className="eyebrow">Variants</p>
-              <h2>Resolution values</h2>
-            </div>
-          </div>
-
-          <div className="detail-stack">
-            {detail.variants.map((variant) => (
-              <section className="detail-block" key={variant.id}>
-                <div className="detail-block-header">
-                  <div>
-                    <h3>{variant.key}</h3>
-                    <p>{variant.description ?? "No variant description."}</p>
-                  </div>
-                </div>
-                <pre className="json-block">{formatJson(variant.value)}</pre>
-              </section>
-            ))}
-          </div>
-        </article>
-
-        <article className="panel detail-panel">
-          <div className="table-header">
-            <div>
-              <p className="eyebrow">Environments</p>
-              <h2>Configuration by environment</h2>
-            </div>
-          </div>
-
-          <div className="detail-stack">
-            {detail.environments.map((environmentDetail) => {
-              const attributeSlots = buildEditableAttributeSlots(environmentDetail.rules);
-              const rolloutSlots = buildEditableRolloutSlots(environmentDetail.rules);
-
-              return (
-                <section
-                  className={`detail-block environment-card${
-                    selectedEnvironmentId === environmentDetail.environment.id ? " is-selected" : ""
-                  }`}
-                  key={environmentDetail.config.id}
-                >
-                  <div className="detail-block-header">
-                    <div>
-                      <h3>
-                        {environmentDetail.environment.name}{" "}
-                        <span className="detail-inline-meta">
-                          ({environmentDetail.environment.key})
-                        </span>
-                      </h3>
-                      <p>
-                        {environmentDetail.config.enabled ? "Enabled" : "Disabled"} · default{" "}
-                        {environmentDetail.config.defaultVariantKey} · projection v
-                        {environmentDetail.config.projectionVersion}
-                      </p>
-                    </div>
-                    <p className="detail-inline-meta">
-                      Updated {formatTimestamp(environmentDetail.config.updatedAt)}
-                    </p>
-                  </div>
-
-                  <form action={updateFlagEnvironmentAction} className="environment-form">
-                    <input name="flagId" type="hidden" value={detail.flag.id} />
-                    <input
-                      name="organizationId"
-                      type="hidden"
-                      value={readParam(resolvedQuery.organizationId) ?? ""}
-                    />
-                    <input
-                      name="projectId"
-                      type="hidden"
-                      value={readParam(resolvedQuery.projectId) ?? ""}
-                    />
-                    <input
-                      name="environmentId"
-                      type="hidden"
-                      value={environmentDetail.environment.id}
-                    />
-
-                    <div className="environment-form-grid">
-                      <label className="context-field">
-                        <span>State</span>
-                        <select
-                          defaultValue={environmentDetail.config.enabled ? "true" : "false"}
-                          name="enabled"
-                        >
-                          <option value="true">Enabled</option>
-                          <option value="false">Disabled</option>
-                        </select>
-                      </label>
-
-                      <label className="context-field">
-                        <span>Default variant</span>
-                        <select
-                          defaultValue={environmentDetail.config.defaultVariantKey}
-                          name="defaultVariantKey"
-                        >
-                          {detail.variants.map((variant) => (
-                            <option key={variant.id} value={variant.key}>
-                              {variant.key}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="rule-editor">
-                      <div>
-                        <p className="eyebrow">Attribute Rules</p>
-                        <p className="detail-inline-meta">
-                          Use commas for the <code>in</code> operator, for example{" "}
-                          <code>us, ca, mx</code>.
-                        </p>
-                      </div>
-
-                      <div className="attribute-list">
-                        {attributeSlots.map((rule, index) => (
-                          <div className="attribute-row" key={rule.id}>
-                            <label className="context-field">
-                              <span>
-                                {index < attributeSlots.length - 1
-                                  ? `Rule ${index + 1}`
-                                  : "New rule"}
-                              </span>
-                              <input
-                                defaultValue={rule.attributeKey}
-                                name="attributeKey"
-                                placeholder="country"
-                                type="text"
-                              />
-                            </label>
-
-                            <label className="context-field">
-                              <span>Operator</span>
-                              <select defaultValue={rule.operator} name="attributeOperator">
-                                <option value="equals">equals</option>
-                                <option value="in">in</option>
-                              </select>
-                            </label>
-
-                            <label className="context-field">
-                              <span>Comparison</span>
-                              <input
-                                defaultValue={rule.comparisonValue}
-                                name="attributeComparisonValue"
-                                placeholder="us or us, ca"
-                                type="text"
-                              />
-                            </label>
-
-                            <label className="context-field">
-                              <span>Variant</span>
-                              <select defaultValue={rule.variantKey} name="attributeVariantKey">
-                                <option value="">No rule</option>
-                                {detail.variants.map((variant) => (
-                                  <option key={variant.id} value={variant.key}>
-                                    {variant.key}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rule-editor">
-                      <div>
-                        <p className="eyebrow">Percentage Rollout</p>
-                        <p className="detail-inline-meta">
-                          Existing rollout rules stay editable here. Leave the extra row blank if
-                          you do not want to add another rule.
-                        </p>
-                      </div>
-
-                      <div className="rollout-list">
-                        {rolloutSlots.map((rule, index) => (
-                          <div className="rollout-row" key={rule.id}>
-                            <label className="context-field">
-                              <span>
-                                {index < rolloutSlots.length - 1 ? `Rule ${index + 1}` : "New rule"}
-                              </span>
-                              <input
-                                defaultValue={rule.rolloutPercentage ?? ""}
-                                max="100"
-                                min="0"
-                                name="rolloutPercentage"
-                                placeholder="0-100"
-                                type="number"
-                              />
-                            </label>
-
-                            <label className="context-field">
-                              <span>Variant</span>
-                              <select defaultValue={rule.variantKey} name="rolloutVariantKey">
-                                <option value="">No rule</option>
-                                {detail.variants.map((variant) => (
-                                  <option key={variant.id} value={variant.key}>
-                                    {variant.key}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button className="primary-button environment-save-button" type="submit">
-                      Save environment
-                    </button>
-                  </form>
-
-                  {environmentDetail.rules.length === 0 ? (
-                    <p className="empty-inline">
-                      No targeting rules. This environment falls back to its default variant.
-                    </p>
-                  ) : null}
-                </section>
-              );
-            })}
-          </div>
-        </article>
+        <FlagVariantsPanel variants={detail.variants} />
+        <FlagEnvironmentsPanel
+          environments={detail.environments}
+          flagId={detail.flag.id}
+          routeContext={{
+            organizationId,
+            projectId,
+          }}
+          selectedEnvironmentId={selectedEnvironmentId}
+          variants={detail.variants}
+        />
       </section>
 
-      <section className="panel detail-panel preview-panel">
-        <div className="table-header">
-          <div>
-            <p className="eyebrow">Phase 5</p>
-            <h2>Preview evaluator</h2>
-          </div>
-        </div>
-
-        <div className="preview-grid">
-          <section className="detail-block">
-            <div className="detail-block-header">
-              <div>
-                <h3>Test a sample context</h3>
-                <p>
-                  Submit a JSON object with string values. Blank input previews the flag with an
-                  empty context.
-                </p>
-              </div>
-            </div>
-
-            <form className="preview-form" method="GET">
-              <input
-                name="organizationId"
-                type="hidden"
-                value={readParam(resolvedQuery.organizationId) ?? ""}
-              />
-              <input
-                name="projectId"
-                type="hidden"
-                value={readParam(resolvedQuery.projectId) ?? ""}
-              />
-              <input name="environmentId" type="hidden" value={selectedEnvironmentId ?? ""} />
-              <input name="preview" type="hidden" value="1" />
-
-              <label className="context-field">
-                <span>Preview environment</span>
-                <select defaultValue={previewEnvironmentId ?? ""} name="previewEnvironmentId">
-                  {detail.environments.map((environmentDetail) => (
-                    <option
-                      key={environmentDetail.environment.id}
-                      value={environmentDetail.environment.id}
-                    >
-                      {environmentDetail.environment.name} ({environmentDetail.environment.key})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="context-field">
-                <span>Context JSON</span>
-                <textarea
-                  className="preview-textarea"
-                  defaultValue={previewContextInput}
-                  name="previewContextJson"
-                  placeholder={'{\n  "userId": "user_123",\n  "email": "alice@example.com"\n}'}
-                  rows={8}
-                />
-              </label>
-
-              <div className="preview-actions">
-                <button className="primary-button" type="submit">
-                  Run preview
-                </button>
-                {previewRequested ? (
-                  <Link className="table-link-button" href={previewResetHref}>
-                    Clear preview
-                  </Link>
-                ) : null}
-              </div>
-            </form>
-          </section>
-
-          <section className="detail-block">
-            <div className="detail-block-header">
-              <div>
-                <h3>Result</h3>
-                <p>
-                  Reason, matched rule, and projection version come from the same Redis-backed
-                  evaluator as the admin preview API.
-                </p>
-              </div>
-            </div>
-
-            {previewErrorMessage ? (
-              <p className="detail-feedback detail-feedback-error preview-feedback">
-                {previewErrorMessage}
-              </p>
-            ) : null}
-
-            {previewResult ? (
-              <div className="preview-result-stack">
-                <div className="preview-summary-grid">
-                  <article className="preview-summary-card">
-                    <span>Variant</span>
-                    <strong>{previewResult.variantKey ?? "None"}</strong>
-                  </article>
-                  <article className="preview-summary-card">
-                    <span>Reason</span>
-                    <strong>{previewResult.reason}</strong>
-                  </article>
-                  <article className="preview-summary-card">
-                    <span>Projection</span>
-                    <strong>
-                      {previewResult.projectionVersion !== null
-                        ? `v${previewResult.projectionVersion}`
-                        : "None"}
-                    </strong>
-                  </article>
-                </div>
-
-                <p className="detail-inline-meta">
-                  Matched rule: <code>{previewResult.matchedRuleId ?? "No matching rule"}</code>
-                </p>
-
-                <div>
-                  <p className="eyebrow">Resolved value</p>
-                  <pre className="json-block">{formatJson(previewResult.value)}</pre>
-                </div>
-              </div>
-            ) : (
-              <p className="empty-inline">
-                {previewRequested
-                  ? "No preview result is available."
-                  : "Run a preview to see the explainable evaluation output for this flag."}
-              </p>
-            )}
-          </section>
-        </div>
-      </section>
+      <FlagPreviewPanel
+        environments={detail.environments}
+        previewContextInput={previewContextInput}
+        previewEnvironmentId={previewEnvironmentId}
+        previewErrorMessage={previewErrorMessage}
+        previewRequested={previewRequested}
+        previewResetHref={previewResetHref}
+        previewResult={previewResult}
+        routeContext={routeContext}
+      />
     </main>
   );
 }

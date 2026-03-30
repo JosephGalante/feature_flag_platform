@@ -7,6 +7,12 @@ import {
   getFlagsForProject,
   getProjectsForOrganization,
 } from "@/lib/admin-api";
+import {
+  buildApiKeysHref,
+  buildAuditLogsHref,
+  buildFlagDetailHref,
+  readSearchParam,
+} from "@/lib/console-hrefs";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
 import Link from "next/link";
@@ -16,14 +22,6 @@ type ConsolePageProps = {
   searchParams?: Promise<SearchParams>;
 };
 
-function readParam(value: string | string[] | undefined): string | null {
-  if (typeof value === "string" && value.length > 0) {
-    return value;
-  }
-
-  return null;
-}
-
 function formatTimestamp(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
@@ -31,81 +29,8 @@ function formatTimestamp(value: string): string {
   }).format(new Date(value));
 }
 
-function buildFlagDetailHref(input: {
-  environmentId: string | null;
-  flagId: string;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
-function buildApiKeysHref(input: {
-  environmentId: string | null;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console/api-keys${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
-function buildAuditLogsHref(input: {
-  environmentId: string | null;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console/audit-logs${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
 function readErrorMessage(value: string | string[] | undefined): string | null {
-  switch (readParam(value)) {
+  switch (readSearchParam(value)) {
     case "invalid_flag_form":
       return "The submitted flag form was incomplete.";
     case "duplicate_flag_key":
@@ -129,7 +54,7 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
 
   const organizations = admin.memberships;
   const selectedOrganizationId =
-    readParam(params.organizationId) ?? organizations[0]?.organizationId ?? null;
+    readSearchParam(params.organizationId) ?? organizations[0]?.organizationId ?? null;
   const selectedOrganization =
     organizations.find(({organizationId}) => organizationId === selectedOrganizationId) ??
     organizations[0] ??
@@ -137,13 +62,13 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const projects = selectedOrganization
     ? await getProjectsForOrganization(selectedOrganization.organizationId, sessionCookie)
     : [];
-  const selectedProjectId = readParam(params.projectId) ?? projects[0]?.id ?? null;
+  const selectedProjectId = readSearchParam(params.projectId) ?? projects[0]?.id ?? null;
   const selectedProject = projects.find(({id}) => id === selectedProjectId) ?? projects[0] ?? null;
   const environments = selectedProject
     ? await getEnvironmentsForProject(selectedProject.id, sessionCookie)
     : [];
   const selectedEnvironmentId =
-    readParam(params.environmentId) ??
+    readSearchParam(params.environmentId) ??
     environments.find(({key}) => key === "staging")?.id ??
     environments[0]?.id ??
     null;

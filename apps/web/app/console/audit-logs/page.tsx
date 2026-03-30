@@ -7,6 +7,12 @@ import {
   getEnvironmentsForProject,
   getProjectsForOrganization,
 } from "@/lib/admin-api";
+import {
+  buildAuditLogsHref,
+  buildConsoleHref,
+  buildFlagDetailHref,
+  readSearchParam,
+} from "@/lib/console-hrefs";
 import type {SearchParams} from "@/lib/types";
 import {cookies} from "next/headers";
 import Link from "next/link";
@@ -23,16 +29,8 @@ type AuditLogsPageProps = {
   searchParams?: Promise<SearchParams>;
 };
 
-function readParam(value: string | string[] | undefined): string | null {
-  if (typeof value === "string" && value.length > 0) {
-    return value;
-  }
-
-  return null;
-}
-
 function readPositiveInteger(value: string | string[] | undefined, fallback: number): number {
-  const parsedValue = Number(readParam(value));
+  const parsedValue = Number(readSearchParam(value));
 
   if (!Number.isInteger(parsedValue) || parsedValue < 1) {
     return fallback;
@@ -61,89 +59,6 @@ function formatEntityType(value: string): string {
 
 function renderJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
-}
-
-function buildConsoleHref(input: {
-  environmentId: string | null;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
-function buildAuditLogsHref(input: {
-  entityType?: string | null;
-  environmentId: string | null;
-  organizationId: string | null;
-  page?: number;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  if (input.entityType) {
-    query.set("entityType", input.entityType);
-  }
-
-  if (input.page !== undefined && input.page > 1) {
-    query.set("page", input.page.toString());
-  }
-
-  const queryString = query.toString();
-
-  return `/console/audit-logs${queryString.length > 0 ? `?${queryString}` : ""}`;
-}
-
-function buildFlagDetailHref(input: {
-  environmentId: string | null;
-  flagId: string;
-  organizationId: string | null;
-  projectId: string | null;
-}): string {
-  const query = new URLSearchParams();
-
-  if (input.organizationId) {
-    query.set("organizationId", input.organizationId);
-  }
-
-  if (input.projectId) {
-    query.set("projectId", input.projectId);
-  }
-
-  if (input.environmentId) {
-    query.set("environmentId", input.environmentId);
-  }
-
-  const queryString = query.toString();
-
-  return `/console/flags/${input.flagId}${queryString.length > 0 ? `?${queryString}` : ""}`;
 }
 
 function renderEntityLink(
@@ -185,7 +100,7 @@ export default async function AuditLogsPage({searchParams}: AuditLogsPageProps) 
 
   const organizations = admin.memberships;
   const selectedOrganizationId =
-    readParam(params.organizationId) ?? organizations[0]?.organizationId ?? null;
+    readSearchParam(params.organizationId) ?? organizations[0]?.organizationId ?? null;
   const selectedOrganization =
     organizations.find(({organizationId}) => organizationId === selectedOrganizationId) ??
     organizations[0] ??
@@ -193,19 +108,19 @@ export default async function AuditLogsPage({searchParams}: AuditLogsPageProps) 
   const projects = selectedOrganization
     ? await getProjectsForOrganization(selectedOrganization.organizationId, sessionCookie)
     : [];
-  const selectedProjectId = readParam(params.projectId) ?? projects[0]?.id ?? null;
+  const selectedProjectId = readSearchParam(params.projectId) ?? projects[0]?.id ?? null;
   const selectedProject = projects.find(({id}) => id === selectedProjectId) ?? projects[0] ?? null;
   const environments = selectedProject
     ? await getEnvironmentsForProject(selectedProject.id, sessionCookie)
     : [];
   const selectedEnvironmentId =
-    readParam(params.environmentId) ??
+    readSearchParam(params.environmentId) ??
     environments.find(({key}) => key === "staging")?.id ??
     environments[0]?.id ??
     null;
   const selectedEnvironment =
     environments.find(({id}) => id === selectedEnvironmentId) ?? environments[0] ?? null;
-  const entityType = readParam(params.entityType);
+  const entityType = readSearchParam(params.entityType);
   const currentPage = readPositiveInteger(params.page, 1);
   const auditFeed = selectedOrganization
     ? await getAuditLogsForOrganization(
