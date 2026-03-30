@@ -157,6 +157,78 @@ function readPercentageRolloutRules(formData: FormData):
   return {rules};
 }
 
+function readAttributeMatchRules(formData: FormData):
+  | {
+      rules: Array<{
+        attributeKey: string;
+        comparisonValue: string | string[];
+        operator: "equals" | "in";
+        ruleType: "attribute_match";
+        variantKey: string;
+      }>;
+    }
+  | {error: "invalid_attribute_rule"} {
+  const attributeKeys = readStringEntries(formData, "attributeKey");
+  const operators = readStringEntries(formData, "attributeOperator");
+  const comparisonValues = readStringEntries(formData, "attributeComparisonValue");
+  const variantKeys = readStringEntries(formData, "attributeVariantKey");
+  const rules: Array<{
+    attributeKey: string;
+    comparisonValue: string | string[];
+    operator: "equals" | "in";
+    ruleType: "attribute_match";
+    variantKey: string;
+  }> = [];
+  const entryCount = Math.max(
+    attributeKeys.length,
+    operators.length,
+    comparisonValues.length,
+    variantKeys.length,
+  );
+
+  for (let index = 0; index < entryCount; index += 1) {
+    const attributeKey = attributeKeys[index] ?? "";
+    const operator = operators[index] ?? "equals";
+    const comparisonValue = comparisonValues[index] ?? "";
+    const variantKey = variantKeys[index] ?? "";
+
+    if (attributeKey.length === 0 && comparisonValue.length === 0 && variantKey.length === 0) {
+      continue;
+    }
+
+    if (
+      attributeKey.length === 0 ||
+      comparisonValue.length === 0 ||
+      variantKey.length === 0 ||
+      (operator !== "equals" && operator !== "in")
+    ) {
+      return {error: "invalid_attribute_rule"};
+    }
+
+    const parsedComparisonValue =
+      operator === "equals"
+        ? comparisonValue
+        : comparisonValue
+            .split(",")
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0);
+
+    if (operator === "in" && parsedComparisonValue.length === 0) {
+      return {error: "invalid_attribute_rule"};
+    }
+
+    rules.push({
+      attributeKey,
+      comparisonValue: parsedComparisonValue,
+      operator,
+      ruleType: "attribute_match",
+      variantKey,
+    });
+  }
+
+  return {rules};
+}
+
 export async function loginAction(formData: FormData): Promise<void> {
   const email = readEmail(formData);
 
@@ -208,6 +280,7 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
   const enabled = readRequiredField(formData, "enabled") === "true";
   const organizationId = readOptionalField(formData, "organizationId");
   const projectId = readOptionalField(formData, "projectId");
+  const attributeInput = readAttributeMatchRules(formData);
   const rolloutInput = readPercentageRolloutRules(formData);
 
   if (flagId.length === 0 || environmentId.length === 0 || defaultVariantKey.length === 0) {
@@ -227,6 +300,18 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
       buildFlagDetailHref({
         environmentId: environmentId || null,
         error: rolloutInput.error,
+        flagId,
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
+  if ("error" in attributeInput) {
+    redirect(
+      buildFlagDetailHref({
+        environmentId: environmentId || null,
+        error: attributeInput.error,
         flagId,
         organizationId,
         projectId,
@@ -269,7 +354,10 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
 
   const variantKeys = new Set(currentDetail.variants.map((variant) => variant.key));
 
-  if (!rolloutInput.rules.every((rule) => variantKeys.has(rule.variantKey))) {
+  if (
+    !rolloutInput.rules.every((rule) => variantKeys.has(rule.variantKey)) ||
+    !attributeInput.rules.every((rule) => variantKeys.has(rule.variantKey))
+  ) {
     redirect(
       buildFlagDetailHref({
         environmentId,
@@ -294,23 +382,18 @@ export async function updateFlagEnvironmentAction(formData: FormData): Promise<v
           };
         }
 
-        const preservedAttributeRules = environmentDetail.rules
-          .filter((rule) => rule.ruleType === "attribute_match")
-          .map(toConfigurationRuleInput);
-        const highestSortOrder = preservedAttributeRules.reduce(
-          (maxSortOrder, rule) => Math.max(maxSortOrder, rule.sortOrder),
-          0,
-        );
-
         return {
           defaultVariantKey,
           enabled,
           environmentId: environmentDetail.environment.id,
           rules: [
-            ...preservedAttributeRules,
+            ...attributeInput.rules.map((rule, index) => ({
+              ...rule,
+              sortOrder: index + 1,
+            })),
             ...rolloutInput.rules.map((rule, index) => ({
               ...rule,
-              sortOrder: highestSortOrder + index + 1,
+              sortOrder: attributeInput.rules.length + index + 1,
             })),
           ],
         };

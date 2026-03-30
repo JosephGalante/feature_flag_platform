@@ -58,23 +58,6 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function formatRule(rule: AdminFlagRule): string {
-  if (rule.ruleType === "attribute_match") {
-    const comparisonValue =
-      typeof rule.comparisonValue === "string" || Array.isArray(rule.comparisonValue)
-        ? JSON.stringify(rule.comparisonValue)
-        : "null";
-
-    return `${rule.attributeKey ?? "attribute"} ${rule.operator ?? "matches"} ${comparisonValue} -> ${rule.variantKey}`;
-  }
-
-  if (rule.ruleType === "percentage_rollout") {
-    return `${rule.rolloutPercentage ?? 0}% rollout -> ${rule.variantKey}`;
-  }
-
-  return `${rule.ruleType} -> ${rule.variantKey}`;
-}
-
 function buildEditableRolloutSlots(rules: AdminFlagRule[]): Array<{
   id: string;
   rolloutPercentage: number | null;
@@ -93,6 +76,39 @@ function buildEditableRolloutSlots(rules: AdminFlagRule[]): Array<{
     {
       id: "new-rollout-rule",
       rolloutPercentage: null,
+      variantKey: "",
+    },
+  ];
+}
+
+function buildEditableAttributeSlots(rules: AdminFlagRule[]): Array<{
+  attributeKey: string;
+  comparisonValue: string;
+  id: string;
+  operator: "equals" | "in";
+  variantKey: string;
+}> {
+  const attributeRules = rules
+    .filter((rule) => rule.ruleType === "attribute_match")
+    .map((rule) => ({
+      attributeKey: rule.attributeKey ?? "",
+      comparisonValue: Array.isArray(rule.comparisonValue)
+        ? rule.comparisonValue.join(", ")
+        : typeof rule.comparisonValue === "string"
+          ? rule.comparisonValue
+          : "",
+      id: rule.id,
+      operator: rule.operator === "in" ? ("in" as const) : ("equals" as const),
+      variantKey: rule.variantKey,
+    }));
+
+  return [
+    ...attributeRules,
+    {
+      attributeKey: "",
+      comparisonValue: "",
+      id: "new-attribute-rule",
+      operator: "equals" as const,
       variantKey: "",
     },
   ];
@@ -117,6 +133,8 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
       return "The submitted environment update was incomplete.";
     case "invalid_variant":
       return "The selected default variant is not valid for this flag.";
+    case "invalid_attribute_rule":
+      return "Each attribute rule needs an attribute key, operator, comparison value, and variant.";
     case "invalid_rollout_rule":
       return "Each rollout rule needs a percentage, a variant, and a value from 0 to 100.";
     case "save_failed":
@@ -156,11 +174,11 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
     <main className="shell">
       <section className="detail-header">
         <div>
-          <p className="eyebrow">Phase 4 / Slice 4</p>
+          <p className="eyebrow">Phase 4 / Slice 5</p>
           <h1>{detail.flag.name}</h1>
           <p className="hero-copy">
             Metadata, variants, and environment settings are live from the admin API. This slice
-            adds percentage rollout editing while keeping attribute rules read-only.
+            adds attribute-match rule editing alongside percentage rollout editing on the same form.
           </p>
         </div>
         <div className="detail-actions">
@@ -231,10 +249,8 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
 
           <div className="detail-stack">
             {detail.environments.map((environmentDetail) => {
+              const attributeSlots = buildEditableAttributeSlots(environmentDetail.rules);
               const rolloutSlots = buildEditableRolloutSlots(environmentDetail.rules);
-              const attributeRules = environmentDetail.rules.filter(
-                (rule) => rule.ruleType === "attribute_match",
-              );
 
               return (
                 <section
@@ -309,6 +325,66 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
 
                     <div className="rule-editor">
                       <div>
+                        <p className="eyebrow">Attribute Rules</p>
+                        <p className="detail-inline-meta">
+                          Use commas for the <code>in</code> operator, for example{" "}
+                          <code>us, ca, mx</code>.
+                        </p>
+                      </div>
+
+                      <div className="attribute-list">
+                        {attributeSlots.map((rule, index) => (
+                          <div className="attribute-row" key={rule.id}>
+                            <label className="context-field">
+                              <span>
+                                {index < attributeSlots.length - 1
+                                  ? `Rule ${index + 1}`
+                                  : "New rule"}
+                              </span>
+                              <input
+                                defaultValue={rule.attributeKey}
+                                name="attributeKey"
+                                placeholder="country"
+                                type="text"
+                              />
+                            </label>
+
+                            <label className="context-field">
+                              <span>Operator</span>
+                              <select defaultValue={rule.operator} name="attributeOperator">
+                                <option value="equals">equals</option>
+                                <option value="in">in</option>
+                              </select>
+                            </label>
+
+                            <label className="context-field">
+                              <span>Comparison</span>
+                              <input
+                                defaultValue={rule.comparisonValue}
+                                name="attributeComparisonValue"
+                                placeholder="us or us, ca"
+                                type="text"
+                              />
+                            </label>
+
+                            <label className="context-field">
+                              <span>Variant</span>
+                              <select defaultValue={rule.variantKey} name="attributeVariantKey">
+                                <option value="">No rule</option>
+                                {detail.variants.map((variant) => (
+                                  <option key={variant.id} value={variant.key}>
+                                    {variant.key}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rule-editor">
+                      <div>
                         <p className="eyebrow">Percentage Rollout</p>
                         <p className="detail-inline-meta">
                           Existing rollout rules stay editable here. Leave the extra row blank if
@@ -353,22 +429,6 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
                       Save environment
                     </button>
                   </form>
-
-                  {attributeRules.length > 0 ? (
-                    <div className="readonly-rules">
-                      <p className="eyebrow">Attribute Rules</p>
-                      <p className="detail-inline-meta">
-                        Attribute-match rules are read-only in this slice.
-                      </p>
-                      <ol className="rule-list">
-                        {attributeRules.map((rule) => (
-                          <li key={rule.id}>
-                            <span className="rule-order">{rule.sortOrder}.</span> {formatRule(rule)}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ) : null}
 
                   {environmentDetail.rules.length === 0 ? (
                     <p className="empty-inline">
