@@ -195,6 +195,10 @@ type FlagsResponse = {
   project: AdminProject;
 };
 
+type CreateFlagResponse = {
+  flag: AdminFlagSummary;
+};
+
 type FlagDetailResponse = AdminFlagDetail;
 
 type ReplaceFlagConfigurationRequest = {
@@ -366,6 +370,38 @@ export async function getFlagsForProject(
   }
 
   return response.data.flags;
+}
+
+export async function createFlagForProject(
+  projectId: string,
+  input: {
+    description: string | null;
+    flagType: "boolean" | "variant";
+    key: string;
+    name: string;
+  },
+  sessionCookie?: string,
+): Promise<AdminFlagSummary> {
+  const response = await apiFetch<CreateFlagResponse>(`/api/admin/projects/${projectId}/flags`, {
+    init: {
+      body: JSON.stringify(input),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    },
+    ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+  });
+
+  if (response.status === 409) {
+    throw new Error("FLAG_KEY_ALREADY_EXISTS");
+  }
+
+  if (response.status !== 201 || !response.data) {
+    throw new Error("Failed to create flag.");
+  }
+
+  return response.data.flag;
 }
 
 export async function getFlagDetail(

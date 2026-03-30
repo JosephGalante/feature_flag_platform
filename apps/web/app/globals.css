@@ -375,6 +375,22 @@ th {
   align-items: end;
 }
 
+.flag-create-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.flag-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.flag-create-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .audit-filter-form {
   display: grid;
   grid-template-columns: minmax(0, 18rem) auto;
@@ -600,6 +616,7 @@ th {
   }
 
   .create-form,
+  .flag-create-grid,
   .environment-form-grid,
   .audit-filter-form,
   .audit-log-diff {

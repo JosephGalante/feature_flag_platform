@@ -6,6 +6,7 @@ import {
   type AdminFlagRule,
   SESSION_COOKIE_NAME,
   createApiKeyForEnvironment,
+  createFlagForProject,
   getFlagDetail,
   loginAsAdmin,
   readCookieValue,
@@ -100,6 +101,40 @@ function buildApiKeysHref(input: {
   const queryString = query.toString();
 
   return `/console/api-keys${queryString.length > 0 ? `?${queryString}` : ""}`;
+}
+
+function buildConsoleHref(input: {
+  environmentId: string | null;
+  error?: string;
+  notice?: string;
+  organizationId: string | null;
+  projectId: string | null;
+}): string {
+  const query = new URLSearchParams();
+
+  if (input.organizationId) {
+    query.set("organizationId", input.organizationId);
+  }
+
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+
+  if (input.environmentId) {
+    query.set("environmentId", input.environmentId);
+  }
+
+  if (input.notice) {
+    query.set("notice", input.notice);
+  }
+
+  if (input.error) {
+    query.set("error", input.error);
+  }
+
+  const queryString = query.toString();
+
+  return `/console${queryString.length > 0 ? `?${queryString}` : ""}`;
 }
 
 function toConfigurationRuleInput(rule: AdminFlagRule) {
@@ -308,6 +343,69 @@ export async function logoutAction(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
   redirect("/login");
+}
+
+export async function createFlagAction(formData: FormData): Promise<void> {
+  const projectId = readRequiredField(formData, "projectId");
+  const organizationId = readOptionalField(formData, "organizationId");
+  const environmentId = readOptionalField(formData, "environmentId");
+  const key = readRequiredField(formData, "key");
+  const name = readRequiredField(formData, "name");
+  const description = readOptionalField(formData, "description");
+  const rawFlagType = readRequiredField(formData, "flagType");
+  const flagType =
+    rawFlagType === "variant" ? "variant" : rawFlagType === "boolean" ? "boolean" : null;
+
+  if (projectId.length === 0 || key.length === 0 || name.length === 0 || flagType === null) {
+    redirect(
+      buildConsoleHref({
+        environmentId,
+        error: "invalid_flag_form",
+        organizationId,
+        projectId: projectId || null,
+      }),
+    );
+  }
+
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
+  const createdFlag = await createFlagForProject(
+    projectId,
+    {
+      description,
+      flagType,
+      key,
+      name,
+    },
+    sessionCookie,
+  ).catch((error: unknown) => {
+    redirect(
+      buildConsoleHref({
+        environmentId,
+        error:
+          error instanceof Error && error.message === "FLAG_KEY_ALREADY_EXISTS"
+            ? "duplicate_flag_key"
+            : "flag_create_failed",
+        organizationId,
+        projectId,
+      }),
+    );
+  });
+
+  redirect(
+    buildFlagDetailHref({
+      environmentId,
+      flagId: createdFlag.id,
+      notice: "flag_created",
+      organizationId,
+      projectId,
+    }),
+  );
 }
 
 export async function createApiKeyAction(formData: FormData): Promise<void> {

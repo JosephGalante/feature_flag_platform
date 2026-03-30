@@ -116,6 +116,8 @@ function buildEditableAttributeSlots(rules: AdminFlagRule[]): Array<{
 
 function readNoticeMessage(value: string | string[] | undefined): string | null {
   switch (readParam(value)) {
+    case "flag_created":
+      return "Flag created with default variants and environment configurations.";
     case "environment_saved":
       return "Environment configuration saved.";
     case "no_changes":

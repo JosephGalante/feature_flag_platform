@@ -1,4 +1,4 @@
-import {logoutAction} from "@/app/actions";
+import {createFlagAction, logoutAction} from "@/app/actions";
 import {ContextSwitcher} from "@/app/console/context-switcher";
 import {
   SESSION_COOKIE_NAME,
@@ -104,6 +104,19 @@ function buildAuditLogsHref(input: {
   return `/console/audit-logs${queryString.length > 0 ? `?${queryString}` : ""}`;
 }
 
+function readErrorMessage(value: string | string[] | undefined): string | null {
+  switch (readParam(value)) {
+    case "invalid_flag_form":
+      return "The submitted flag form was incomplete.";
+    case "duplicate_flag_key":
+      return "A flag with that key already exists in this project.";
+    case "flag_create_failed":
+      return "The API rejected the flag creation request.";
+    default:
+      return null;
+  }
+}
+
 export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
@@ -137,6 +150,7 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const selectedEnvironment =
     environments.find(({id}) => id === selectedEnvironmentId) ?? environments[0] ?? null;
   const flags = selectedProject ? await getFlagsForProject(selectedProject.id, sessionCookie) : [];
+  const errorMessage = readErrorMessage(params.error);
 
   return (
     <main className="shell">
@@ -200,6 +214,76 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
           <strong>{flags.length}</strong>
           <span>Loaded for the selected project</span>
         </article>
+      </section>
+
+      {errorMessage ? (
+        <p className="detail-feedback detail-feedback-error">{errorMessage}</p>
+      ) : null}
+
+      <section className="panel detail-panel">
+        <div className="table-header">
+          <div>
+            <p className="eyebrow">Create</p>
+            <h2>Ship a new flag</h2>
+          </div>
+          <p className="table-hint">
+            New flags automatically seed default variants and environment configurations.
+          </p>
+        </div>
+
+        {selectedProject ? (
+          <form action={createFlagAction} className="flag-create-form">
+            <input
+              name="organizationId"
+              type="hidden"
+              value={selectedOrganization?.organizationId ?? ""}
+            />
+            <input name="projectId" type="hidden" value={selectedProject.id} />
+            <input name="environmentId" type="hidden" value={selectedEnvironment?.id ?? ""} />
+
+            <div className="flag-create-grid">
+              <label className="context-field">
+                <span>Name</span>
+                <input name="name" placeholder="New Checkout" type="text" />
+              </label>
+
+              <label className="context-field">
+                <span>Key</span>
+                <input name="key" placeholder="new_checkout" type="text" />
+              </label>
+
+              <label className="context-field">
+                <span>Flag type</span>
+                <select defaultValue="boolean" name="flagType">
+                  <option value="boolean">Boolean</option>
+                  <option value="variant">Variant</option>
+                </select>
+              </label>
+
+              <label className="context-field flag-create-description">
+                <span>Description</span>
+                <input
+                  name="description"
+                  placeholder="Roll out the new checkout experience"
+                  type="text"
+                />
+              </label>
+            </div>
+
+            <div className="flag-create-actions">
+              <button className="primary-button create-button" type="submit">
+                Create flag
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="empty-state">
+            <p>Select a project before creating a flag.</p>
+            <span>
+              This form creates project-scoped flags and seeds every environment automatically.
+            </span>
+          </div>
+        )}
       </section>
 
       <section className="panel table-panel">
