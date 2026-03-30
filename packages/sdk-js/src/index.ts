@@ -1,4 +1,4 @@
-import type {EvaluationResult} from "@feature-flag-platform/evaluation-core";
+import type {EvaluationBatchResult, EvaluationResult} from "@feature-flag-platform/evaluation-core";
 
 export type EvaluationContextInput = Record<string, string>;
 
@@ -80,11 +80,39 @@ export class FeatureFlagClient {
       throw new Error("FeatureFlagClient flagKey is required.");
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}/api/evaluate`, {
-      body: JSON.stringify({
-        context,
-        flagKey: trimmedFlagKey,
-      }),
+    return (await this.post("/api/evaluate", {
+      context,
+      flagKey: trimmedFlagKey,
+    })) as EvaluationResult;
+  }
+
+  async evaluateMany(
+    flagKeys: ReadonlyArray<string>,
+    context: EvaluationContextInput = {},
+  ): Promise<EvaluationBatchResult> {
+    if (flagKeys.length === 0) {
+      throw new Error("FeatureFlagClient flagKeys must contain at least one flag key.");
+    }
+
+    const trimmedFlagKeys = flagKeys.map((flagKey) => {
+      const trimmedFlagKey = flagKey.trim();
+
+      if (trimmedFlagKey.length === 0) {
+        throw new Error("FeatureFlagClient flagKeys must not contain empty flag keys.");
+      }
+
+      return trimmedFlagKey;
+    });
+
+    return (await this.post("/api/evaluate/batch", {
+      context,
+      flagKeys: trimmedFlagKeys,
+    })) as EvaluationBatchResult;
+  }
+
+  private async post(path: string, body: unknown): Promise<unknown> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      body: JSON.stringify(body),
       headers: {
         "content-type": "application/json",
         "x-api-key": this.apiKey,
@@ -97,8 +125,8 @@ export class FeatureFlagClient {
       throw readApiError(response.status, payload);
     }
 
-    return payload as EvaluationResult;
+    return payload;
   }
 }
 
-export type {EvaluationResult} from "@feature-flag-platform/evaluation-core";
+export type {EvaluationBatchResult, EvaluationResult} from "@feature-flag-platform/evaluation-core";
