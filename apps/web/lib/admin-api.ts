@@ -211,6 +211,10 @@ type ReplaceFlagConfigurationResponse = {
   detail: AdminFlagDetail;
 };
 
+type UpdateFlagMetadataResponse = {
+  flag: AdminFlagSummary;
+};
+
 type ApiKeysResponse = {
   apiKeys: AdminApiKeySummary[];
   environment: AdminEnvironment & {organizationId: string};
@@ -421,6 +425,54 @@ export async function getFlagDetail(
   }
 
   return response.data;
+}
+
+export async function updateFlagMetadataById(
+  flagId: string,
+  input: {
+    description?: string | null;
+    name?: string;
+    status?: "active" | "archived";
+  },
+  sessionCookie?: string,
+): Promise<AdminFlagSummary> {
+  const response = await apiFetch<UpdateFlagMetadataResponse>(`/api/admin/flags/${flagId}`, {
+    init: {
+      body: JSON.stringify(input),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "PATCH",
+    },
+    ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+  });
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to update flag metadata.");
+  }
+
+  return response.data.flag;
+}
+
+export async function archiveFlagById(
+  flagId: string,
+  sessionCookie?: string,
+): Promise<AdminFlagSummary> {
+  const response = await apiFetch<UpdateFlagMetadataResponse>(
+    `/api/admin/flags/${flagId}/archive`,
+    {
+      init: {
+        method: "POST",
+      },
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to archive flag.");
+  }
+
+  return response.data.flag;
 }
 
 export async function replaceFlagConfiguration(

@@ -362,6 +362,25 @@ th {
   margin-bottom: 1rem;
 }
 
+.metadata-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.metadata-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.metadata-form-actions,
+.metadata-archive-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
 .environment-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -617,6 +636,7 @@ th {
 
   .create-form,
   .flag-create-grid,
+  .metadata-form-grid,
   .environment-form-grid,
   .audit-filter-form,
   .audit-log-diff {
@@ -635,6 +655,8 @@ th {
   .audit-log-actions,
   .audit-pagination,
   .audit-filter-actions,
+  .metadata-form-actions,
+  .metadata-archive-row,
   .table-header-actions {
     flex-direction: column;
     align-items: stretch;

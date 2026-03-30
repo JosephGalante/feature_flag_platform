@@ -5,6 +5,7 @@ import {redirect} from "next/navigation";
 import {
   type AdminFlagRule,
   SESSION_COOKIE_NAME,
+  archiveFlagById,
   createApiKeyForEnvironment,
   createFlagForProject,
   getFlagDetail,
@@ -12,6 +13,7 @@ import {
   readCookieValue,
   replaceFlagConfiguration,
   revokeApiKeyById,
+  updateFlagMetadataById,
 } from "../lib/admin-api";
 import {API_KEY_FLASH_COOKIE_NAME, encodeApiKeyFlash} from "../lib/api-key-flash";
 
@@ -506,6 +508,110 @@ export async function revokeApiKeyAction(formData: FormData): Promise<void> {
     buildApiKeysHref({
       environmentId,
       notice: "api_key_revoked",
+      organizationId,
+      projectId,
+    }),
+  );
+}
+
+export async function updateFlagMetadataAction(formData: FormData): Promise<void> {
+  const flagId = readRequiredField(formData, "flagId");
+  const environmentId = readOptionalField(formData, "environmentId");
+  const organizationId = readOptionalField(formData, "organizationId");
+  const projectId = readOptionalField(formData, "projectId");
+  const name = readRequiredField(formData, "name");
+  const description = readOptionalField(formData, "description");
+
+  if (flagId.length === 0 || name.length === 0) {
+    redirect(
+      buildFlagDetailHref({
+        environmentId,
+        error: "invalid_metadata_form",
+        flagId,
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
+  await updateFlagMetadataById(
+    flagId,
+    {
+      description,
+      name,
+    },
+    sessionCookie,
+  ).catch(() => {
+    redirect(
+      buildFlagDetailHref({
+        environmentId,
+        error: "metadata_save_failed",
+        flagId,
+        organizationId,
+        projectId,
+      }),
+    );
+  });
+
+  redirect(
+    buildFlagDetailHref({
+      environmentId,
+      flagId,
+      notice: "metadata_saved",
+      organizationId,
+      projectId,
+    }),
+  );
+}
+
+export async function archiveFlagAction(formData: FormData): Promise<void> {
+  const flagId = readRequiredField(formData, "flagId");
+  const environmentId = readOptionalField(formData, "environmentId");
+  const organizationId = readOptionalField(formData, "organizationId");
+  const projectId = readOptionalField(formData, "projectId");
+
+  if (flagId.length === 0) {
+    redirect(
+      buildConsoleHref({
+        environmentId,
+        error: "flag_archive_failed",
+        organizationId,
+        projectId,
+      }),
+    );
+  }
+
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionCookie) {
+    redirect("/login");
+  }
+
+  await archiveFlagById(flagId, sessionCookie).catch(() => {
+    redirect(
+      buildFlagDetailHref({
+        environmentId,
+        error: "flag_archive_failed",
+        flagId,
+        organizationId,
+        projectId,
+      }),
+    );
+  });
+
+  redirect(
+    buildFlagDetailHref({
+      environmentId,
+      flagId,
+      notice: "flag_archived",
       organizationId,
       projectId,
     }),

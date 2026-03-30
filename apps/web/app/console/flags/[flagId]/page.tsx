@@ -1,4 +1,8 @@
-import {updateFlagEnvironmentAction} from "@/app/actions";
+import {
+  archiveFlagAction,
+  updateFlagEnvironmentAction,
+  updateFlagMetadataAction,
+} from "@/app/actions";
 import {
   type AdminFlagRule,
   SESSION_COOKIE_NAME,
@@ -118,6 +122,10 @@ function readNoticeMessage(value: string | string[] | undefined): string | null 
   switch (readParam(value)) {
     case "flag_created":
       return "Flag created with default variants and environment configurations.";
+    case "metadata_saved":
+      return "Flag metadata saved.";
+    case "flag_archived":
+      return "Flag archived.";
     case "environment_saved":
       return "Environment configuration saved.";
     case "no_changes":
@@ -131,6 +139,8 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
   switch (readParam(value)) {
     case "flag_not_found":
       return "The flag could not be reloaded before saving.";
+    case "invalid_metadata_form":
+      return "The submitted metadata form was incomplete.";
     case "invalid_form":
       return "The submitted environment update was incomplete.";
     case "invalid_variant":
@@ -139,6 +149,10 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
       return "Each attribute rule needs an attribute key, operator, comparison value, and variant.";
     case "invalid_rollout_rule":
       return "Each rollout rule needs a percentage, a variant, and a value from 0 to 100.";
+    case "metadata_save_failed":
+      return "The API rejected the metadata update.";
+    case "flag_archive_failed":
+      return "The API rejected the archive request.";
     case "save_failed":
       return "The API rejected the environment update.";
     default:
@@ -179,8 +193,8 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
           <p className="eyebrow">Phase 4 / Slice 5</p>
           <h1>{detail.flag.name}</h1>
           <p className="hero-copy">
-            Metadata, variants, and environment settings are live from the admin API. This slice
-            adds attribute-match rule editing alongside percentage rollout editing on the same form.
+            Metadata, archive controls, variants, and environment settings are live from the admin
+            API on the same page.
           </p>
         </div>
         <div className="detail-actions">
@@ -215,6 +229,117 @@ export default async function FlagDetailPage({params, searchParams}: FlagDetailP
           <strong>{formatTimestamp(detail.flag.updatedAt)}</strong>
           <span>Created {formatTimestamp(detail.flag.createdAt)}</span>
         </article>
+      </section>
+
+      <section className="panel detail-panel">
+        <div className="table-header">
+          <div>
+            <p className="eyebrow">Metadata</p>
+            <h2>Identity and lifecycle</h2>
+          </div>
+        </div>
+
+        <div className="detail-stack">
+          <section className="detail-block">
+            <div className="detail-block-header">
+              <div>
+                <h3>Edit flag metadata</h3>
+                <p>
+                  Update the display name and optional description without touching configuration.
+                </p>
+              </div>
+            </div>
+
+            <form action={updateFlagMetadataAction} className="metadata-form">
+              <input name="flagId" type="hidden" value={detail.flag.id} />
+              <input
+                name="organizationId"
+                type="hidden"
+                value={readParam(resolvedQuery.organizationId) ?? ""}
+              />
+              <input
+                name="projectId"
+                type="hidden"
+                value={readParam(resolvedQuery.projectId) ?? ""}
+              />
+              <input
+                name="environmentId"
+                type="hidden"
+                value={readParam(resolvedQuery.environmentId) ?? ""}
+              />
+
+              <div className="metadata-form-grid">
+                <label className="context-field">
+                  <span>Name</span>
+                  <input defaultValue={detail.flag.name} name="name" type="text" />
+                </label>
+
+                <label className="context-field">
+                  <span>Description</span>
+                  <input
+                    defaultValue={detail.flag.description ?? ""}
+                    name="description"
+                    placeholder="No description yet."
+                    type="text"
+                  />
+                </label>
+              </div>
+
+              <div className="metadata-form-actions">
+                <button className="primary-button create-button" type="submit">
+                  Save metadata
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="detail-block">
+            <div className="detail-block-header">
+              <div>
+                <h3>Archive flag</h3>
+                <p>
+                  Archiving keeps the flag visible for audit history but marks it inactive across
+                  the control plane.
+                </p>
+              </div>
+            </div>
+
+            <div className="metadata-archive-row">
+              <p className="detail-inline-meta">
+                Current status{" "}
+                <span className={`status-pill status-${detail.flag.status}`}>
+                  {detail.flag.status}
+                </span>
+              </p>
+
+              {detail.flag.status === "archived" ? (
+                <span className="table-link-button is-disabled">Already archived</span>
+              ) : (
+                <form action={archiveFlagAction}>
+                  <input name="flagId" type="hidden" value={detail.flag.id} />
+                  <input
+                    name="organizationId"
+                    type="hidden"
+                    value={readParam(resolvedQuery.organizationId) ?? ""}
+                  />
+                  <input
+                    name="projectId"
+                    type="hidden"
+                    value={readParam(resolvedQuery.projectId) ?? ""}
+                  />
+                  <input
+                    name="environmentId"
+                    type="hidden"
+                    value={readParam(resolvedQuery.environmentId) ?? ""}
+                  />
+                  <button className="table-link-button danger-button" type="submit">
+                    Archive flag
+                  </button>
+                </form>
+              )}
+            </div>
+          </section>
+        </div>
       </section>
 
       <section className="detail-grid">
