@@ -80,6 +80,30 @@ function buildApiKeysHref(input: {
   return `/console/api-keys${queryString.length > 0 ? `?${queryString}` : ""}`;
 }
 
+function buildAuditLogsHref(input: {
+  environmentId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
+}): string {
+  const query = new URLSearchParams();
+
+  if (input.organizationId) {
+    query.set("organizationId", input.organizationId);
+  }
+
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+
+  if (input.environmentId) {
+    query.set("environmentId", input.environmentId);
+  }
+
+  const queryString = query.toString();
+
+  return `/console/audit-logs${queryString.length > 0 ? `?${queryString}` : ""}`;
+}
+
 export default async function ConsolePage({searchParams}: ConsolePageProps) {
   const params = (await searchParams) ?? {};
   const cookieStore = await cookies();
@@ -189,16 +213,28 @@ export default async function ConsolePage({searchParams}: ConsolePageProps) {
               Open a flag to review its environments and change default rollout settings.
             </p>
             {selectedEnvironment ? (
-              <Link
-                className="table-link-button"
-                href={buildApiKeysHref({
-                  environmentId: selectedEnvironment.id,
-                  organizationId: selectedOrganization?.organizationId ?? null,
-                  projectId: selectedProject?.id ?? null,
-                })}
-              >
-                API Keys
-              </Link>
+              <>
+                <Link
+                  className="table-link-button"
+                  href={buildAuditLogsHref({
+                    environmentId: selectedEnvironment.id,
+                    organizationId: selectedOrganization?.organizationId ?? null,
+                    projectId: selectedProject?.id ?? null,
+                  })}
+                >
+                  Audit Log
+                </Link>
+                <Link
+                  className="table-link-button"
+                  href={buildApiKeysHref({
+                    environmentId: selectedEnvironment.id,
+                    organizationId: selectedOrganization?.organizationId ?? null,
+                    projectId: selectedProject?.id ?? null,
+                  })}
+                >
+                  API Keys
+                </Link>
+              </>
             ) : null}
           </div>
         </div>

@@ -305,6 +305,12 @@ th {
   background: var(--accent-soft);
 }
 
+.table-link-button.is-disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
 .detail-feedback {
   margin: 0 0 1rem;
   border-radius: 18px;
@@ -369,6 +375,74 @@ th {
   align-items: end;
 }
 
+.audit-filter-form {
+  display: grid;
+  grid-template-columns: minmax(0, 18rem) auto;
+  gap: 0.9rem;
+  align-items: end;
+}
+
+.audit-filter-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.audit-log-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.audit-log-card {
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.audit-log-header,
+.audit-pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.audit-log-header h3 {
+  margin: 0;
+}
+
+.audit-log-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.audit-log-time {
+  color: var(--muted);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.audit-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin: 0.85rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.audit-log-meta code {
+  color: var(--text);
+}
+
+.audit-log-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
 .rule-editor,
 .readonly-rules {
   border-top: 1px solid var(--border);
@@ -423,7 +497,7 @@ th {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: start;
+  align-items: flex-start;
   margin-bottom: 0.75rem;
 }
 
@@ -526,7 +600,9 @@ th {
   }
 
   .create-form,
-  .environment-form-grid {
+  .environment-form-grid,
+  .audit-filter-form,
+  .audit-log-diff {
     grid-template-columns: 1fr;
   }
 
@@ -536,5 +612,18 @@ th {
 
   .attribute-row {
     grid-template-columns: 1fr;
+  }
+
+  .audit-log-header,
+  .audit-log-actions,
+  .audit-pagination,
+  .audit-filter-actions,
+  .table-header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .audit-log-time {
+    white-space: normal;
   }
 }

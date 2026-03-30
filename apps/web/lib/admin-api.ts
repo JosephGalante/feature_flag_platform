@@ -113,6 +113,40 @@ type AdminApiKeySummary = {
   status: "active" | "revoked";
 };
 
+export type AdminAuditLogEntry = {
+  action: string;
+  actor: {
+    email: string;
+    id: string;
+    name: string;
+  };
+  after: unknown;
+  before: unknown;
+  createdAt: string;
+  entityId: string;
+  entityType: string;
+  environmentId: string | null;
+  id: string;
+  organizationId: string;
+  projectId: string | null;
+  requestId: string;
+};
+
+type AuditLogFilters = {
+  createdAfter: string | null;
+  createdBefore: string | null;
+  entityType: string | null;
+  environmentId: string | null;
+  projectId: string | null;
+};
+
+type AuditLogPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
 type AttributeMatchConfigurationRuleInput = {
   attributeKey: string;
   comparisonValue: string | string[];
@@ -185,6 +219,13 @@ type CreateApiKeyResponse = {
 
 type RevokeApiKeyResponse = {
   apiKey: AdminApiKeySummary;
+};
+
+type OrganizationAuditLogsResponse = {
+  auditLogs: AdminAuditLogEntry[];
+  filters: AuditLogFilters;
+  organization: AdminMembership;
+  pagination: AuditLogPagination;
 };
 
 type LoginResponse = {
@@ -436,6 +477,54 @@ export async function revokeApiKeyById(
   }
 
   return response.data.apiKey;
+}
+
+export async function getAuditLogsForOrganization(
+  organizationId: string,
+  input: {
+    entityType?: string;
+    environmentId?: string;
+    page?: number;
+    pageSize?: number;
+    projectId?: string;
+  } = {},
+  sessionCookie?: string,
+): Promise<OrganizationAuditLogsResponse> {
+  const query = new URLSearchParams();
+
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+
+  if (input.environmentId) {
+    query.set("environmentId", input.environmentId);
+  }
+
+  if (input.entityType) {
+    query.set("entityType", input.entityType);
+  }
+
+  if (input.page !== undefined) {
+    query.set("page", input.page.toString());
+  }
+
+  if (input.pageSize !== undefined) {
+    query.set("pageSize", input.pageSize.toString());
+  }
+
+  const queryString = query.toString();
+  const response = await apiFetch<OrganizationAuditLogsResponse>(
+    `/api/admin/organizations/${organizationId}/audit-logs${queryString.length > 0 ? `?${queryString}` : ""}`,
+    {
+      ...(sessionCookie !== undefined ? {sessionCookie} : {}),
+    },
+  );
+
+  if (response.status !== 200 || !response.data) {
+    throw new Error("Failed to load audit logs.");
+  }
+
+  return response.data;
 }
 
 export function readCookieValue(setCookieHeader: string | null, cookieName: string): string | null {
