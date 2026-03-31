@@ -34,6 +34,52 @@ a {
   color: inherit;
 }
 
+.github-link {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid rgba(248, 241, 232, 0.18);
+  border-radius: 999px;
+  background: rgba(26, 40, 34, 0.88);
+  color: #f8f1e8;
+  text-decoration: none;
+  box-shadow: 0 18px 45px rgba(24, 36, 32, 0.18);
+  backdrop-filter: blur(16px);
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.github-link:hover,
+.github-link:focus-visible {
+  transform: translateY(-1px);
+  background: rgba(31, 57, 62, 0.94);
+  box-shadow: 0 22px 50px rgba(24, 36, 32, 0.22);
+}
+
+.github-link:focus-visible {
+  outline: 3px solid rgba(224, 108, 47, 0.35);
+  outline-offset: 3px;
+}
+
+.github-link__icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.github-link__label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 button,
 input,
 textarea,
@@ -748,5 +794,17 @@ th {
 
   .audit-log-time {
     white-space: normal;
+  }
+}
+
+@media (max-width: 640px) {
+  .github-link {
+    top: 0.75rem;
+    right: 0.75rem;
+    padding: 0.8rem;
+  }
+
+  .github-link__label {
+    display: none;
   }
 }
