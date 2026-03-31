@@ -2,6 +2,10 @@
 
 A multi-tenant feature flag system built to demonstrate backend platform thinking, not just CRUD.
 
+## Live Demo
+
+- Live app: [galante-feature-flag.vercel.app](https://galante-feature-flag.vercel.app)
+
 This project separates a Postgres-backed control plane from a Redis-backed evaluation plane, supports environment-scoped API keys, keeps a full audit trail, and uses asynchronous projection rebuilds so evaluation stays fast while source-of-truth data remains relational and recoverable.
 
 ## Why This Project Is Interesting
